@@ -2,7 +2,7 @@
 
 Your Claude usage limits as a game health card, drawn above the prompt in Claude Code.
 
-![A healthy villager at full session HP with a gold GOD MODE badge](assets/healthy.svg)
+![A healthy villager at full session HP with a gold GOD MODE badge](assets/screenshot-healthy.png)
 
 Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit across all models), show the hit points you have left. HP is 100 minus the percent used, with the time each one resets. An Age of Empires–style villager watches over them, and his mood follows your lowest bar.
 
@@ -15,9 +15,9 @@ Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit acro
 - **Rank badges.** A glowing pill at the right of the card: Scout, Contributor, Innovator, Top contributor or GOD MODE.
 - **Death.** At 0 HP the villager goes grey, gets X eyes and a halo, and the card reads *Claude has been defeated* with the time you'll be back.
 
-![Low HP: a crying villager, red bars and a red alert](assets/critical.svg)
+![Low HP: a crying villager, red bars, red-alert chevrons and an Innovator badge](assets/screenshot-low.png)
 
-![Defeated: the villager at 0 HP](assets/defeated.svg)
+![Defeated: the villager at 0 HP](assets/screenshot-defeated.png)
 
 ## Install
 
