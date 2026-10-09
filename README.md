@@ -24,7 +24,7 @@ Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit acro
 In a Claude Code terminal session:
 
 ```
-/plugin install villager-hp --marketplace OWNER/villager-hp
+/plugin install villager-hp --marketplace Ashley-Pettit/villager-hp
 ```
 
 Answer `y` to add the marketplace and press Enter for the user scope. The card appears above the prompt, in the terminal and in the desktop app's Code tab. The desktop app draws the full animated card; a terminal draws a text version.
