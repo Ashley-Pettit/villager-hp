@@ -1,0 +1,15 @@
+{
+  "name": "villager-hp",
+  "owner": {
+    "name": "Ash"
+  },
+  "plugins": [
+    {
+      "name": "villager-hp",
+      "source": "./"
+    }
+  ],
+  "metadata": {
+    "description": "villager-hp: your Claude usage limits as an animated villager health card"
+  }
+}
