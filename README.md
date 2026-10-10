@@ -59,6 +59,10 @@ It reads your session's usage figures and keeps your chosen rank in its own smal
 
 Readings appear on Claude subscriptions, which report rate-limit windows; on API keys the bars show `—` until a reading arrives.
 
+## More mods by Ash
+
+- [lgtm-flash](https://github.com/Ashley-Pettit/lgtm-flash): a container ship sails past and drops L, G, T and M on its deck every time Claude changes your code.
+
 ## License
 
 MIT

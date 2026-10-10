@@ -1,6 +1,6 @@
 {
   "name": "villager-hp",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Your Claude session and weekly usage limits as an animated villager health card, with rank badges and a death screen at 0 HP",
   "author": { "name": "Ash" },
   "license": "MIT",

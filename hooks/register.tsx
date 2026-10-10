@@ -108,7 +108,10 @@ export const register: Register = on => {
     const m = mood(all)
     const elements = $.ui.resolve(e)
 
-    if ('Svg' in elements) {
+    // The animated card everywhere but the terminal, which gets the text bars.
+    // Chosen by the surface, not by which elements the table lists: a table can
+    // carry an element its surface draws as nothing.
+    if (e.surface !== 'terminal' && 'Svg' in elements) {
       const { Box, Svg } = elements
       const alt = all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ')
       return (
