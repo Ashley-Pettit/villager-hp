@@ -4,6 +4,29 @@ Your Claude usage limits as a game health card, drawn above the prompt in Claude
 
 ![A healthy villager at full session HP with a gold GOD MODE badge](assets/screenshot-healthy.png)
 
+## How to install
+
+It takes about a minute. You need [Claude Code](https://claude.com/claude-code) on your computer first.
+
+1. **Open a terminal.** On Windows, open PowerShell. On a Mac, open Terminal.
+2. **Start Claude Code.** Type `claude` and press Enter.
+3. **Copy this line, paste it in, and press Enter:**
+
+   ```
+   /plugin install villager-hp --marketplace Ashley-Pettit/villager-hp
+   ```
+
+4. **Answer two questions.** For the first, type `y` and press Enter. For the second, just press Enter.
+5. **Try it.** The health card appears above where you type. Type `/hp 40` and press Enter to see it at 40 HP.
+
+Good to know:
+
+- The line in step 3 only works in the terminal. Pasting it into the Claude desktop app or the Claude website does nothing.
+- You only do this once. After that it also shows up in the Claude desktop app's Code tab.
+- The full animated card shows in the desktop app's Code tab. In a terminal you get a simpler text version.
+
+## What you see
+
 Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit across all models), show the hit points you have left. HP is 100 minus the percent used, with the time each one resets. An Age of Empires–style villager watches over them, and his mood follows your lowest bar.
 
 ## What it does
@@ -18,16 +41,6 @@ Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit acro
 ![Low HP: a crying villager, red bars, red-alert chevrons and an Innovator badge](assets/screenshot-low.png)
 
 ![Defeated: the villager at 0 HP](assets/screenshot-defeated.png)
-
-## Install
-
-In a Claude Code terminal session:
-
-```
-/plugin install villager-hp --marketplace Ashley-Pettit/villager-hp
-```
-
-Answer `y` to add the marketplace and press Enter for the user scope. The card appears above the prompt, in the terminal and in the desktop app's Code tab. The desktop app draws the full animated card; a terminal draws a text version.
 
 ## Commands
 
