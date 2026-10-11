@@ -1,9 +1,11 @@
 {
   "name": "villager-hp",
-  "version": "2.5.2",
-  "description": "Your Claude session and weekly usage limits as an animated villager health card, with rank badges and a death screen at 0 HP",
-  "author": { "name": "Ash" },
+  "version": "2.8.0",
+  "description": "Your Claude session and weekly usage limits as an animated villager health card, with a weekly pace hourglass, rank badges and a death screen at 0 HP",
+  "author": { "name": "Ash", "url": "https://github.com/Ashley-Pettit" },
+  "homepage": "https://github.com/Ashley-Pettit/villager-hp#readme",
+  "repository": "https://github.com/Ashley-Pettit/villager-hp",
   "license": "MIT",
-  "keywords": ["mod", "usage", "rate-limits", "health-bar", "game", "hud"],
+  "keywords": ["mod", "usage", "usage-limits", "rate-limits", "weekly-limit", "pace", "health-bar", "status", "game", "hud"],
   "types": "./types/index.d.ts"
 }

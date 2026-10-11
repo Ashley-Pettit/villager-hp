@@ -2,23 +2,32 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Limit } from '../types'
-import { RANKS, backIn, bars, hudSvg, killer, mood } from './hud'
-import type { Rank } from './hud'
+import { RANKS, backIn, bars, hudSvg, killer, mood, outBy, weeklyPace } from './hud'
+import type { Pace, Rank } from './hud'
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
 const demoAtom = atom({ plugin: 'villager-hp', key: 'demo' } as const, null as number | null)
+const paceDemoAtom = atom({ plugin: 'villager-hp', key: 'paceDemo' } as const, null as boolean | null)
 const nowAtom = atom({ plugin: 'villager-hp', key: 'now' } as const, 0)
 const rankAtom = atom({ plugin: 'villager-hp', key: 'rank' } as const, 'god' as Rank)
 
 const FACES = { healthy: '(◕‿◕)', hurt: '(•_•)', critical: '(╥﹏╥)', dead: '(x_x)', unknown: '(•‿•)' }
 const SEGMENTS = 20
 // Named by /hp, to tell at a glance which version is loaded.
-const VERSION = '2.5: animated villager; card and HP commands only'
+const VERSION = '2.8: weekly pace hourglass; the villager stays cheerful for longer'
 // AoE-style: green for what's left, red for what's gone.
 const split = (hp: number) => {
   const full = Math.round((hp / 100) * SEGMENTS)
   return { green: '█'.repeat(full), red: '█'.repeat(SEGMENTS - full) }
 }
+
+// The weekly pace in a sentence, for /hp and /pace.
+const paceLine = (pace: Pace | null) =>
+  pace === null
+    ? 'Weekly pace: not enough of the week to go on yet.'
+    : pace.isOver
+      ? `Weekly pace: over. At this rate you're ${outBy(pace.runsOut)}, before the week resets (about ${pace.projected}% of the limit by then).`
+      : `Weekly pace: on track. At this rate about ${pace.projected}% of the limit is used by the reset.`
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -34,6 +43,11 @@ export const register: Register = on => {
       name: 'rank',
       description: 'Change the rank badge on your health card: /rank scout, contributor, innovator, top, god',
       argumentHint: '[scout | contributor | innovator | top | god]',
+    })
+    await $.command.register({
+      name: 'pace',
+      description: 'Whether your weekly limit lasts at this rate, or preview the warning: /pace over, /pace ok, /pace off for the real one',
+      argumentHint: '[over | ok | off]',
     })
     // The rank you picked, kept across sessions.
     const saved = await $.store.get('rank')
@@ -72,6 +86,17 @@ export const register: Register = on => {
     return { text: `Your badge is now ${RANKS[rank].name}.` }
   })
 
+  on('command.run', { command: 'pace' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'over' || arg === 'ok') {
+      await update($, paceDemoAtom, () => arg === 'over')
+      return { text: arg === 'over' ? 'Preview: over pace for the week. /pace off for the real one.' : 'Preview: on track for the week. /pace off for the real one.' }
+    }
+    if (arg === 'off' || arg === 'real') await update($, paceDemoAtom, () => null)
+    else if (arg !== '') return { text: 'Use /pace, /pace over, /pace ok or /pace off.' }
+    return { text: paceLine(weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), Date.now())) }
+  })
+
   // Fresh readings arrive after each turn and whenever a window moves a point.
   on('session.measure', async ($, e, next) => {
     await update($, limitsAtom, () => e.rateLimits)
@@ -95,6 +120,7 @@ export const register: Register = on => {
     return {
       text: [
         ...all.map(b => `${b.label}: ${b.hp === null ? 'no reading yet' : `${b.hp}/100 HP${b.respawn ? `, resets in ${b.respawn}` : ''}`}`),
+        paceLine(weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), Date.now())),
         `(villager-hp ${VERSION})`,
       ].join('\n'),
     }
@@ -104,8 +130,12 @@ export const register: Register = on => {
     const below = await next(e)
     if (e.props.hasSurvey) return below
 
-    const all = bars(await read($, limitsAtom), await read($, demoAtom), await read($, nowAtom) || Date.now())
+    const now = (await read($, nowAtom)) || Date.now()
+    const all = bars(await read($, limitsAtom), await read($, demoAtom), now)
     const m = mood(all)
+    const pace = weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), now)
+    // Set while the week is on course to run out, and he is still standing.
+    const over = pace !== null && pace.isOver && m !== 'dead' ? pace : null
     const elements = $.ui.resolve(e)
 
     // The animated card everywhere but the terminal, which gets the text bars.
@@ -113,11 +143,11 @@ export const register: Register = on => {
     // carry an element its surface draws as nothing.
     if (e.surface !== 'terminal' && 'Svg' in elements) {
       const { Box, Svg } = elements
-      const alt = all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ')
+      const alt = all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') + (over !== null ? `, on course to be ${outBy(over.runsOut)}` : '')
       return (
         <Box flexDirection="column">
           {below}
-          <Svg key={`hp-${m}`} source={hudSvg(all, await read($, rankAtom))} alt={`Claude's health: ${alt}`} />
+          <Svg key={`hp-${m}-${over !== null}`} source={hudSvg(all, await read($, rankAtom), over !== null)} alt={`Claude's health: ${alt}`} />
         </Box>
       )
     }
@@ -145,6 +175,7 @@ export const register: Register = on => {
                     <Text color="#a01d14">{split(b.hp).red}</Text>
                     <Text color="#f1e3c0" bold>{` ${b.hp}/100`}</Text>
                     <Text color="#cdbb94">{b.respawn ? `  ${b.respawn}` : ''}</Text>
+                    {over !== null && b.label === 'WEEKLY' ? <Text color="#f59e0b">{`  ⏳ ${outBy(over.runsOut)}`}</Text> : null}
                   </>
                 )}
               </Box>

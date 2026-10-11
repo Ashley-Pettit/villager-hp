@@ -51,10 +51,45 @@ export const backIn = (respawn: string) => (respawn ? (/^\d/.test(respawn) ? `ba
 
 export const killer = (all: Bar[]) => all.find(b => b.hp !== null && b.hp <= 0)
 
+// ---- weekly pace: at this rate, does the week's allowance last to its reset? ----
+
+export type Pace = {
+  isOver: boolean // on course to run out before the reset
+  projected: number // percent of the weekly limit used by the reset, at this rate
+  runsOut: string // when it runs out at this rate, as a reset reads ("Thu 3pm"); '' when it lasts
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+// Too early to call: in a week's first hours one busy sitting reads as a blown week.
+const PACE_MIN_MS = 12 * 60 * 60 * 1000
+
+// The week's use so far, carried on at the same rate to the reset. `demo`
+// pins the answer for a preview: true over, false on track, null the real one.
+// Null when there is nothing to go on yet.
+export const weeklyPace = (limits: Limit[], demo: boolean | null, now: number): Pace | null => {
+  if (demo === false) return { isOver: false, projected: 80, runsOut: '' }
+  const limit = limits.find(l => l.kind === KINDS.WEEKLY)
+  const resets = Date.parse(limit?.resetsAt ?? '')
+  const elapsed = now - (resets - WEEK_MS)
+  const isKnown = limit !== undefined && !Number.isNaN(resets) && elapsed >= PACE_MIN_MS && now < resets
+  if (demo === true) return { isOver: true, projected: 130, runsOut: isKnown ? respawnIn(new Date(now + (resets - now) / 2).toISOString(), now) : 'Thu 3pm' }
+  if (!isKnown) return null
+  const projected = Math.round((limit.percentUsed / elapsed) * WEEK_MS)
+  if (projected <= 100) return { isOver: false, projected, runsOut: '' }
+  const left = Math.max(0, 100 - limit.percentUsed)
+  return { isOver: true, projected, runsOut: respawnIn(new Date(now + (left / limit.percentUsed) * elapsed).toISOString(), now) }
+}
+
+// "out in 2h 50m", "out by Thu 3pm"
+export const outBy = (runsOut: string) => (/^\d/.test(runsOut) ? `out in ${runsOut}` : `out by ${runsOut}`)
+
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
 
 export const HUD_W = 960
 export const HUD_H = 64
+// A little air above the card, in the same units. Outside the card's own
+// coordinates, so nothing on it moves.
+export const HUD_PAD_TOP = 6
 const AV = { cx: 34, cy: 32, r: 25 } // the avatar circle
 const ICON_X = 74
 const LABEL_X = 92
@@ -98,9 +133,13 @@ const tear = (x: number, delay: number) => `
     <animate attributeName="opacity" values="0.95;0.95;0" keyTimes="0;0.7;1" dur="1.1s" begin="${delay}s" repeatCount="indefinite"/>
   </path>`
 
+// The least health for each of his spirits; under the last he sobs. He grins
+// for as long as the bar is green and only frowns once it is red.
+const STAGE = { happy: 50, content: 25, hurt: 10, crying: 5 }
+
 // His face by how much health is left: grinning, flat, frowning, crying, sobbing.
 const face = (hp: number) => {
-  const ry = hp < 25 ? 1.5 : 2
+  const ry = hp < STAGE.hurt ? 1.5 : 2
   const blink = `keyTimes="0;0.9;0.94;0.98;1" dur="4.2s" repeatCount="indefinite"`
   const eye = (x: number) =>
     `<ellipse cx="${x}" cy="32.2" rx="1.7" ry="${ry}" fill="${INK}"><animate attributeName="ry" values="${ry};${ry};0.2;${ry};${ry}" ${blink}/></ellipse>` +
@@ -113,10 +152,10 @@ const face = (hp: number) => {
       ? stroke('M 27.4,28.6 L 31.4,27.2') + stroke('M 36.6,27.2 L 40.6,28.6')
       : stroke('M 27.6,27.6 Q 29.8,26.6 32,27.4') + stroke('M 36,27.4 Q 38.2,26.6 40.4,27.6')
   const blush = `<circle cx="27.2" cy="36" r="2" fill="#f28b82" opacity="0.35"/><circle cx="40.8" cy="36" r="2" fill="#f28b82" opacity="0.35"/>`
-  if (hp >= 75) return brows(false) + eyes + nose + blush + stroke('M 30.4,38.2 Q 34,41.4 37.6,38.2')
-  if (hp >= 50) return brows(false) + eyes + nose + stroke('M 31,39.2 L 37,39.2')
-  if (hp >= 25) return brows(true) + eyes + nose + stroke('M 30.6,40.4 Q 34,37.8 37.4,40.4')
-  if (hp >= 10) return brows(true) + eyes + nose + stroke('M 30.4,40.6 Q 34,37.4 37.6,40.6') + tear(29.4, 0)
+  if (hp >= STAGE.happy) return brows(false) + eyes + nose + blush + stroke('M 30.4,38.2 Q 34,41.4 37.6,38.2')
+  if (hp >= STAGE.content) return brows(false) + eyes + nose + stroke('M 31,39.2 L 37,39.2')
+  if (hp >= STAGE.hurt) return brows(true) + eyes + nose + stroke('M 30.6,40.4 Q 34,37.8 37.4,40.4')
+  if (hp >= STAGE.crying) return brows(true) + eyes + nose + stroke('M 30.4,40.6 Q 34,37.4 37.6,40.6') + tear(29.4, 0)
   return (
     brows(true) +
     eyes +
@@ -133,20 +172,20 @@ type Motion = { pick: string; head: string; breathe: number; tremble?: string }
 const motion = (m: Mood, hp: number): Motion => {
   if (m === 'dead') return { pick: '', head: '', breathe: 0 }
   // Happy: hard at work, the pickaxe chopping, head bobbing along.
-  if (hp >= 75)
+  if (hp >= STAGE.happy)
     return {
       pick: `values="0 44 62;-24 44 62;6 44 62;0 44 62" keyTimes="0;0.45;0.6;1" dur="1.6s"`,
       head: `values="0 0;0 -0.9;0 0" dur="0.8s"`,
       breathe: 2.4,
     }
   // Content: a slower, steadier swing.
-  if (hp >= 50)
+  if (hp >= STAGE.content)
     return { pick: `values="0 44 62;-14 44 62;0 44 62" dur="2.6s"`, head: `values="0 0;0 -0.5;0 0" dur="2.6s"`, breathe: 2.8 }
   // Hurt: the pickaxe barely lifts, his head drooping.
-  if (hp >= 25)
+  if (hp >= STAGE.hurt)
     return { pick: `values="0 44 62;-5 44 62;0 44 62" dur="3.6s"`, head: `values="0 0;0 0.8;0 0" dur="3.6s"`, breathe: 3.6 }
   // Crying: the dropped pickaxe drags a little; he sniffles.
-  if (hp >= 10)
+  if (hp >= STAGE.crying)
     return { pick: `values="0 46 62;3 46 62;0 46 62" dur="2.2s"`, head: `values="0 0;0 0.7;0 0;0 0.5;0 0" dur="1.1s"`, breathe: 1.4 }
   // Sobbing: shoulders heaving, the whole villager trembling.
   return {
@@ -164,7 +203,7 @@ const villager = (m: Mood, hp: number) => {
   const tunicDark = dead ? '#4c505a' : '#2c56b8'
   const cap = dead ? '#5a554f' : '#7a4a24'
   const capDark = dead ? '#4a4540' : '#5e3818'
-  const coping = hp >= 25 || dead
+  const coping = hp >= STAGE.hurt || dead
   const mv = motion(m, hp)
   const spin = (v: string) => (v ? `<animateTransform attributeName="transform" type="rotate" ${v} repeatCount="indefinite"/>` : '')
   const move = (v: string) => (v ? `<animateTransform attributeName="transform" type="translate" ${v} repeatCount="indefinite"/>` : '')
@@ -194,11 +233,11 @@ const villager = (m: Mood, hp: number) => {
     <path d="M 23.4,30 Q 27,25.2 34,25.6 Q 41,25.2 44.6,30 Q 41,27.4 34,27.6 Q 27,27.4 23.4,30 Z" fill="${capDark}"/>`
 
   const bandage =
-    !dead && hp < 50
+    !dead && hp < STAGE.content
       ? `<rect x="25" y="26.2" width="18" height="3.4" rx="1.2" fill="#f3efe6" transform="rotate(-8 34 28)"/><circle cx="38.5" cy="27.4" r="0.9" fill="#d84a4a"/>`
       : ''
   const sweat =
-    !dead && hp < 25
+    !dead && hp < STAGE.hurt
       ? `<path d="M 45.5,24 q 1.6,2.8 0,3.8 q -1.6,-1 0,-3.8 z" fill="#5ec4ff"><animate attributeName="opacity" values="1;0.2;1" dur="0.9s" repeatCount="indefinite"/></path>`
       : ''
   // Dead: X eyes and a halo that bobs above him, glinting.
@@ -235,6 +274,34 @@ const avatar = (m: Mood, low: number | null) => {
   <circle cx="${AV.cx}" cy="${AV.cy}" r="${AV.r}" fill="url(#avbg)"/>
   <g clip-path="url(#avclip)">${villager(m, low ?? 100)}</g>
   <circle cx="${AV.cx}" cy="${AV.cy}" r="${AV.r}" fill="none" stroke="${ring}" stroke-width="2.5">${pulse}</circle>`
+}
+
+// Over pace for the week: an hourglass floats at his shoulder, its sand
+// running out and the glass turning over. Drawn over the avatar's ring, so
+// the villager himself stays as his health has him.
+const PACE = { cx: 58, cy: 10.5, r: 8 }
+const paceBadge = () => {
+  const sand = T.amber[1]
+  const glass = '#f1e3c0'
+  const turn = `dur="3s" repeatCount="indefinite"`
+  return `<g>
+    <animateTransform attributeName="transform" type="translate" values="0 0;0 -1.2;0 0" dur="2.2s" repeatCount="indefinite"/>
+    <circle cx="${PACE.cx}" cy="${PACE.cy}" r="${PACE.r}" fill="#1a1410" stroke="${T.amber[0]}" stroke-width="1.4" filter="url(#soft)"/>
+    <g transform="translate(${PACE.cx} ${PACE.cy}) scale(1.15)"><g>
+      <animateTransform attributeName="transform" type="rotate" values="0;0;180" keyTimes="0;0.8;1" ${turn}/>
+      <path d="M -2.6,-3.6 L 2.6,-3.6 L 0.5,0 L 2.6,3.6 L -2.6,3.6 L -0.5,0 Z" fill="#2a2118" stroke="${glass}" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M -3.2,-3.9 L 3.2,-3.9 M -3.2,3.9 L 3.2,3.9" stroke="${glass}" stroke-width="1.1" stroke-linecap="round"/>
+      <path d="M -1.7,-2.9 L 1.7,-2.9 L 0,0 Z" fill="${sand}">
+        <animateTransform attributeName="transform" type="scale" values="1;0.15;0.15" keyTimes="0;0.8;1" ${turn}/>
+      </path>
+      <line x1="0" y1="0" x2="0" y2="3.2" stroke="${sand}" stroke-width="0.5">
+        <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.75;0.8;1" ${turn}/>
+      </line>
+      <g transform="translate(0 3.2)"><path d="M -2,0 L 2,0 L 0,-2.2 Z" fill="${sand}">
+        <animateTransform attributeName="transform" type="scale" values="1 0.1;1 1;1 1" keyTimes="0;0.8;1" ${turn}/>
+      </path></g>
+    </g></g>
+  </g>`
 }
 
 // ---- the bars ----
@@ -447,7 +514,7 @@ const aurora = (colour: string) => `
   <radialGradient id="aura"><stop offset="0" stop-color="${colour}" stop-opacity="0.16"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient>
   <radialGradient id="aura2"><stop offset="0" stop-color="#3b82f6" stop-opacity="0.10"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/></radialGradient>`
 
-export const hudSvg = (all: Bar[], rank: Rank = 'god') => {
+export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false) => {
   // Fit the bars to this badge, so the gap before it is the same for every rank.
   BAR_W = 960 - 16 - badgeBox(rank).w - BADGE_GAP - 78 - 66 - 16 - BAR_X
   VALUE_X = BAR_X + BAR_W + 16
@@ -469,8 +536,9 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god') => {
       </g>`
     : ''
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${HUD_W} ${HUD_H}" width="${HUD_W * 3}" height="${HUD_H * 3}" preserveAspectRatio="xMinYMin meet">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${HUD_W} ${HUD_H + HUD_PAD_TOP}" width="${HUD_W * 3}" height="${(HUD_H + HUD_PAD_TOP) * 3}" preserveAspectRatio="xMinYMin meet">
   <defs>
+    <clipPath id="frameclip"><rect x="0" y="0" width="${HUD_W}" height="${HUD_H}"/></clipPath>
     <linearGradient id="card" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a2029"/><stop offset="1" stop-color="#12161c"/></linearGradient>
     <clipPath id="cardclip"><rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14"/></clipPath>
     <pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#ffffff" opacity="0.05"/></pattern>
@@ -488,6 +556,7 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god') => {
     ${gradient('g0', session.hp)}
     ${gradient('g1', weekly.hp)}
   </defs>
+  <g transform="translate(0 ${HUD_PAD_TOP})" clip-path="url(#frameclip)">
   <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="url(#card)" stroke="#2a313b"/>
   ${aurora(glow)}
   <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="url(#cardglow)"/>
@@ -495,10 +564,12 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god') => {
   ${hologram()}
   ${radar(m)}
   ${avatar(m, low)}
+  ${isOverPace && m !== 'dead' ? paceBadge() : ''}
   ${row(session, ROW_CY[0] ?? 20, 'g0', 0.15)}
   ${row(weekly, ROW_CY[1] ?? 44, 'g1', 0.35)}
   ${rankBadge(rank)}
   ${cornerBrackets()}
   ${deathScreen}
+  </g>
 </svg>`
 }
