@@ -34,7 +34,7 @@ Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit acro
 - **Live HP.** Readings refresh after every turn and whenever a limit moves by a point. Reset times count down each minute.
 - **An animated villager.** He blinks and breathes in every state. At full health he chops away with his pickaxe; as HP falls his swing slows, his head droops, a bandage appears, then tears; near zero he sobs and trembles.
 - **Bars that feel alive.** They sweep in, energy stripes flow through them, a shine passes along, and sparks drift off the leading edge. The heart beats faster as HP drops.
-- **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+ shows **MAX**) and red-alert chevrons on a low one.
+- **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+; a full one shows **MAX**) and red-alert chevrons on a low one.
 - **Rank badges.** A glowing pill at the right of the card: Scout, Contributor, Innovator, Top contributor or GOD MODE.
 - **Death.** At 0 HP the villager goes grey, gets X eyes and a halo, and the card reads *Claude has been defeated* with the time you'll be back.
 

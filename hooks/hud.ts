@@ -367,11 +367,13 @@ const row = (bar: Bar, cy: number, id: string, delay: number) => {
         </g>`
       : ''
   const chipText = bar.respawn
-  const isMax = hp >= 90
+  // Only a full bar reads MAX; a nearly full one still crackles, and says its number.
+  const isMax = hp >= 100
+  const isCharged = hp >= 90
   const value = isMax
-    ? `<text x="${VALUE_X}" y="${cy + 5.5}" ${UI} font-size="15" font-weight="800" letter-spacing="1.5" fill="${HUD_CYAN}" filter="url(#soft)">MAX<tspan dx="4" font-size="12" font-weight="600" letter-spacing="0" fill="${T.muted}">${hp}</tspan></text>`
+    ? `<text x="${VALUE_X}" y="${cy + 5.5}" ${UI} font-size="15" font-weight="800" letter-spacing="1.5" fill="${HUD_CYAN}" filter="url(#soft)">MAX</text>`
     : `<text x="${VALUE_X}" y="${cy + 5.5}" ${UI} font-size="17" font-weight="700" fill="${T.text}">${hp}<tspan font-size="12" font-weight="600" fill="${T.muted}">/100</tspan></text>`
-  const fx = isMax ? overcharge(BAR_X + 4, BAR_X + w - 4, top) : hp > 0 && hp < 25 ? redAlert(VALUE_X + 66 + 78 + 5, cy) : ''
+  const fx = isCharged ? overcharge(BAR_X + 4, BAR_X + w - 4, top) : hp > 0 && hp < 25 ? redAlert(VALUE_X + 66 + 78 + 5, cy) : ''
   const chipX = VALUE_X + 66
   const CHIP_W = 78 // one width for both rows, so their edges line up
   const chip = chipText
