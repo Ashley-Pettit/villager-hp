@@ -11,31 +11,41 @@ villager-hp is a Claude Code mod (a plugin). It turns your 5-hour session limit 
 
 ## How to install
 
-It takes about a minute. You need [Claude Code](https://claude.com/claude-code) on your computer first.
+You paste one line. It works even if you only have the Claude desktop app.
 
-1. **Open a terminal.** On Windows, open PowerShell. On a Mac, open Terminal.
-2. **Start Claude Code.** Type `claude` and press Enter.
-3. **Copy this line, paste it in, and press Enter:**
+### Windows
+
+1. Press the Start button, type `powershell` and press Enter. A window opens.
+2. Copy this line, paste it into that window and press Enter:
 
    ```
-   /plugin install villager-hp --marketplace Ashley-Pettit/villager-hp
+   irm https://raw.githubusercontent.com/Ashley-Pettit/villager-hp/prod/install.ps1 | iex
    ```
 
-4. **Answer two questions.** For the first, type `y` and press Enter. For the second, just press Enter.
-5. **Try it.** The health card appears above where you type. Type `/hp 40` and press Enter to see it at 40 HP.
+3. Wait until it says **Done**. Then close Claude and open it again.
+
+### Mac
+
+1. Press Command and Space, type `terminal` and press Enter. A window opens.
+2. Copy this line, paste it into that window and press Enter:
+
+   ```
+   curl -fsSL https://raw.githubusercontent.com/Ashley-Pettit/villager-hp/prod/install.sh | bash
+   ```
+
+3. Wait until it says **Done**. Then close Claude and open it again.
+
+### Try it
+
+In the Claude desktop app, open the Code tab. The health card sits above where you type. Type `/hp 40` and press Enter to see it at 40 HP.
 
 Good to know:
 
-- The line in step 3 only works in the terminal. Pasting it into the Claude desktop app or the Claude website does nothing.
-- You only do this once. After that it also shows up in the Claude desktop app's Code tab.
-- The full animated card shows in the desktop app's Code tab. In a terminal you get a simpler text version.
+- The line gets Claude Code's command-line tool if you don't have it, then adds the mod. It asks no questions and needs no admin password.
+- To get a newer version later, paste the same line again.
+- The full animated card shows in the desktop app's Code tab. If you run Claude Code in a terminal you get a simpler text version.
 - It needs Claude Code 2.1.287 or later. This version was tested on 2.1.295.
-
-Already have it? To get the newest version, run this in a terminal (not inside Claude Code), then restart Claude Code:
-
-```
-claude plugin update villager-hp@villager-hp
-```
+- Already use Claude Code in a terminal? You can type `/plugin install villager-hp --marketplace Ashley-Pettit/villager-hp` there instead.
 
 ## What you see
 

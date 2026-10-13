@@ -1,0 +1,11 @@
+{
+  "name": "villager-hp",
+  "owner": { "name": "Ash" },
+  "metadata": { "description": "villager-hp: your Claude usage limits as an animated villager health card" },
+  "plugins": [
+    {
+      "name": "villager-hp",
+      "source": { "source": "archive", "url": "https://github.com/Ashley-Pettit/villager-hp/archive/refs/heads/prod.zip" }
+    }
+  ]
+}
