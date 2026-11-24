@@ -2,6 +2,7 @@ import type { On, RenderElement } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
 import { fmtTokens, isUltra, pacePosition, paceShort, weeklyPace } from './hud'
+import { ordered, parseArtifacts } from './library'
 
 // The band as the engine hands it to a ui.render hook.
 const BAND = {
@@ -191,22 +192,6 @@ test('terminal: /ultra on draws the pace row and no SESSION row', async ($, on) 
   expect(await ui.find({ type: 'Text', text: /on track|spare/ })).toBeDefined()
 })
 
-test('desktop: the badge shows the account type, ULTRA on Ultra, until a rank is picked', async ($, on) => {
-  statusRow(on)
-  memoryStore(on)
-  const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  await $.command.run(hp('64'))
-  const card = async () => String((await ui.find({ type: 'Svg' }))?.props.source)
-
-  expect(await card()).not.toMatch(/GOD MODE/)
-  await $.command.run(ultraCmd('on'))
-  expect(await card()).toMatch(/⚡ ULTRA/)
-  await $.command.run({ ...hp('god'), command: 'rank' })
-  expect(await card()).toMatch(/GOD MODE/)
-  await $.command.run({ ...hp('plan'), command: 'rank' })
-  expect(await card()).toMatch(/⚡ ULTRA/)
-})
-
 test('terminal: not Ultra draws SESSION, WEEKLY and PACE rows', async ($, on) => {
   statusRow(on)
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'terminal', component: 'AbovePrompt', props: BAND })
@@ -215,4 +200,69 @@ test('terminal: not Ultra draws SESSION, WEEKLY and PACE rows', async ($, on) =>
   expect(await ui.find({ type: 'Text', text: /^SESSION/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^WEEKLY/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^PACE/ })).toBeDefined()
+})
+
+// ---- the Open pane ----
+
+const ARTIFACTS = `3 published artifacts (most recently opened or updated first):
+- (mine, web page, not a Doc) Road Defect Sorter — https://claude.ai/artifact/aaa — updated 2026-11-10
+- (mine, Doc) Quarterly plan — https://claude.ai/artifact/bbb — updated 2026-11-24
+- (mine, Design) Linda avatar — https://claude.ai/artifact/ccc — updated 2026-11-20`
+
+test('library: reads the artifact list, a Doc counts as a doc', () => {
+  const items = parseArtifacts(ARTIFACTS)
+  expect(items.map(i => [i.title, i.kind, i.detail])).toEqual([
+    ['Road Defect Sorter', 'artifact', 'web page'],
+    ['Quarterly plan', 'doc', 'Doc'],
+    ['Linda avatar', 'artifact', 'Design'],
+  ])
+})
+
+test('library: pinned first, then the most recently edited', () => {
+  const items = parseArtifacts(ARTIFACTS)
+  const { pinned, rest } = ordered(items, ['https://claude.ai/artifact/aaa'], 'all')
+  expect(pinned.map(i => i.title)).toEqual(['Road Defect Sorter'])
+  expect(rest.map(i => i.title)).toEqual(['Quarterly plan', 'Linda avatar'])
+  expect(ordered(items, [], 'doc').rest.map(i => i.title)).toEqual(['Quarterly plan'])
+})
+
+test('desktop: the card carries an OPEN button where the badge was', async ($, on) => {
+  statusRow(on)
+  const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  await $.command.run(hp('64'))
+
+  expect(await ui.find({ type: 'Button', label: 'OPEN' })).toBeDefined()
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toMatch(/GOD MODE|ULTRA/)
+})
+
+test('pane: /open lists artifacts and local docs and videos, recent first, and pins one to the top', async ($, on) => {
+  memoryStore(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('tool.call', { tool: 'Artifact' }, () => ({ result: ARTIFACTS }) as never)
+  on('session.info', () => ({ value: { transcriptPath: '/h/u/.claude/t.jsonl', configRoot: '/h/u/.claude', platform: 'macos' } }) as never)
+  on('fs.list', ($, e) => {
+    const path = (e as unknown as { path: string }).path
+    const dir: Record<string, { name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }[]> = {
+      '/h/u/Documents': [{ name: 'Budget.docx', kind: 'file', size: 1, mtimeMs: Date.parse('2026-11-23T09:00:00Z'), isLink: false }],
+      '/h/u/Movies': [{ name: 'Holiday.mp4', kind: 'file', size: 1, mtimeMs: Date.parse('2026-11-01T09:00:00Z'), isLink: false }],
+    }
+    return { value: dir[path] ?? [] } as never
+  })
+  const ui = await $.ui.mount({
+    plugin: 'villager-hp',
+    surface: 'desktop',
+    component: 'Pane',
+    requestId: 'villager-open',
+    props: { title: 'Open', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  })
+  await $.command.run({ ...hp(''), command: 'open' })
+
+  const titles = async () => (await ui.findAll({})).filter(n => n.type === 'Link' || n.type === 'Button').map(n => String(n.props.label)).filter(l => !/^(All|Artifacts|Docs|Videos|Refresh|Refreshing…|★|☆)$/.test(l))
+  // The scan runs in the background; give it a few turns of the loop.
+  for (let i = 0; i < 50 && (await titles()).length < 5; i++) await new Promise(r => setTimeout(r, 5))
+  expect(await titles()).toEqual(['Quarterly plan', 'Budget.docx', 'Linda avatar', 'Road Defect Sorter', 'Holiday.mp4'])
+
+  await ui.press({ key: 'pin:/h/u/Movies/Holiday.mp4' })
+  expect((await titles())[0]).toBe('Holiday.mp4')
+  expect(await ui.find({ type: 'Text', text: 'Pinned' })).toBeDefined()
 })

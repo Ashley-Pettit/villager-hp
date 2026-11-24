@@ -7,7 +7,7 @@ villager-hp is a Claude Code mod (a plugin). It turns your 5-hour session limit 
 [![What the scanner says this mod can reach](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/Ashley-Pettit--villager-hp--villager-hp-reach.svg)](https://mods.aidojo.si/#Ashley-Pettit--villager-hp--villager-hp)
 [![Validation result](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/Ashley-Pettit--villager-hp--villager-hp-validates.svg)](https://mods.aidojo.si/#Ashley-Pettit--villager-hp--villager-hp)
 
-![A healthy villager at full session HP with a gold GOD MODE badge](assets/screenshot-healthy.png)
+![A healthy villager at full session HP](assets/screenshot-healthy.png)
 
 ## How to install
 
@@ -63,9 +63,16 @@ Three bars: **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit ac
 
 On an Ultra plan the 5-hour window doesn't apply, so the card hides **SESSION** and shows just **WEEKLY** and **PACE**. The card works this out by itself (a weekly limit with no 5-hour one, or "ultra" in the account's plan name). To set it by hand, type `/ultra on`, `/ultra off` or `/ultra auto`.
 
-The badge on the right shows your Claude account type (ULTRA, MAX, PRO, TEAM...). Prefer a rank? `/rank god` (or scout, contributor, innovator, top); `/rank plan` goes back to your account type.
+## Open: your artifacts, docs and videos
 
-Under the badge, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included. `/hp` gives the breakdown.
+The **OPEN** button at the right of the card (or `/open`) opens a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
+
+- Most recently edited at the top.
+- Press ☆ to pin something; pinned things stay at the top, across sessions. Press ★ to unpin.
+- Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
+- An artifact opens in your browser; a doc or video opens in its own app.
+
+Under the OPEN button, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included. `/hp` gives the breakdown.
 
 ## What it does
 
@@ -74,7 +81,7 @@ Under the badge, **LAST PROMPT** shows the tokens your most recent prompt used, 
 - **An animated villager.** He blinks and breathes in every state. He grins and chops away with his pickaxe for as long as the bar is green; as HP falls his swing slows, his head droops, a bandage appears, then tears; near zero he sobs and trembles.
 - **Bars that feel alive.** They sweep in, energy stripes flow through them, a shine passes along, and sparks drift off the leading edge. The heart beats faster as HP drops.
 - **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+; a full one shows **MAX**) and red-alert chevrons on a low one.
-- **Rank badges.** A glowing pill at the right of the card: Scout, Contributor, Innovator, Top contributor or GOD MODE.
+- **OPEN button.** Your artifacts, Word docs and videos, newest first, with pins.
 - **Death.** At 0 HP the villager goes grey, gets X eyes and a halo, and the card reads *Claude has been defeated* with the time you'll be back.
 
 ![Low HP: a crying villager, red bars, red-alert chevrons and an Innovator badge](assets/screenshot-low.png)
@@ -90,7 +97,8 @@ Under the badge, **LAST PROMPT** shows the tokens your most recent prompt used, 
 | `/hp off` | Back to your real limits |
 | `/die` | Watch Claude die (same as `/hp 0`) |
 | `/revive` | Bring Claude back to your real limits |
-| `/rank top` | Change your badge: `scout`, `contributor`, `innovator`, `top` or `god` |
+| `/open` | Open your artifacts, Word docs and videos (same as the OPEN button) |
+| `/ultra on` | Ultra layout: hide SESSION (`/ultra off`, `/ultra auto`) |
 | `/pace` | Say whether your weekly limit lasts at this rate, and when it runs out if not |
 | `/pace over` | Preview the hourglass warning (`/pace ok` previews being on track) |
 | `/pace off` | Back to your real pace |
@@ -99,12 +107,19 @@ In a terminal, an over-pace week adds `⏳ out by Thu 3pm` to the WEEKLY row.
 
 ## What it can reach
 
-It reads your session's usage figures and keeps your chosen rank in its own small store. It makes no network calls, starts no processes, and reads or writes no files of yours.
+It reads your session's usage figures and keeps your pins and `/ultra` choice in its own small store. When you open the Open pane it also:
+
+- lists your artifacts through Claude Code's Artifact tool (a call to claude.ai, signed in as you);
+- lists file names in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders, looking for Word docs and videos. It reads names and dates only, never what's in the files;
+- opens the file you press with your computer's own `open`, `explorer.exe` or `xdg-open`.
+
+It writes no files of yours.
 
 Readings appear on Claude subscriptions, which report rate-limit windows; on API keys the bars show `—` until a reading arrives.
 
 ## What's new
 
+- **2.9** A PACE bar under WEEKLY (SESSION hidden on Ultra), the OPEN pane for your artifacts, docs and videos with pins, and the last prompt's tokens.
 - **2.8** Weekly pace: an hourglass when the week is on course to run out before it resets, plus `/pace`. The villager stays cheerful for as long as the bar is green.
 - **2.5** The animated villager, rank badges and the death screen.
 

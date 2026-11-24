@@ -14,6 +14,17 @@ export type PromptTokens = {
   cacheWrite: number
 }
 
+// One thing to open from the Open pane.
+export type LibKind = 'artifact' | 'doc' | 'video'
+export type LibItem = {
+  id: string // the artifact's URL, or the file's path
+  kind: LibKind
+  title: string
+  where: string // URL or path
+  modifiedMs: number
+  detail: string // the artifact's type, or the file's folder
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'villager-hp': {
@@ -24,8 +35,11 @@ declare module 'claude-code' {
       paceDemo: boolean | null
       // The clock, ticked each minute so the respawn countdowns move.
       now: number
-      // The badge on the card: 'plan' for your account type, or a rank you picked.
-      badge: 'plan' | 'scout' | 'contributor' | 'innovator' | 'top' | 'god'
+      // The Open pane: what it found, what you pinned (kept across sessions), the tab shown.
+      library: LibItem[]
+      libraryLoading: boolean
+      pins: string[]
+      libraryTab: 'all' | 'artifact' | 'doc' | 'video'
       // The plan you picked with /plan; auto by default.
       plan: Plan
       // The plan the account's login names, when it names one.
