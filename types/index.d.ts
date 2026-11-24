@@ -24,8 +24,8 @@ declare module 'claude-code' {
       paceDemo: boolean | null
       // The clock, ticked each minute so the respawn countdowns move.
       now: number
-      // The rank badge on the card: scout, contributor, innovator, top or god.
-      rank: 'scout' | 'contributor' | 'innovator' | 'top' | 'god'
+      // The badge on the card: 'plan' for your account type, or a rank you picked.
+      badge: 'plan' | 'scout' | 'contributor' | 'innovator' | 'top' | 'god'
       // The plan you picked with /plan; auto by default.
       plan: Plan
       // The plan the account's login names, when it names one.

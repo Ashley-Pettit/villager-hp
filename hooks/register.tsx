@@ -2,14 +2,16 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Limit, Plan, PromptTokens } from '../types'
-import { RANKS, backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, outBy, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
+import { RANKS, TIERS, accountTier, backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, outBy, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace, Rank } from './hud'
+type Badge = 'plan' | Rank
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
 const demoAtom = atom({ plugin: 'villager-hp', key: 'demo' } as const, null as number | null)
 const paceDemoAtom = atom({ plugin: 'villager-hp', key: 'paceDemo' } as const, null as boolean | null)
 const nowAtom = atom({ plugin: 'villager-hp', key: 'now' } as const, 0)
-const rankAtom = atom({ plugin: 'villager-hp', key: 'rank' } as const, 'god' as Rank)
+// The badge on the card: 'plan' wears your account type (Ultra, Max, Pro...), or a rank you picked.
+const badgeAtom = atom({ plugin: 'villager-hp', key: 'badge' } as const, 'plan' as Badge)
 const planAtom = atom({ plugin: 'villager-hp', key: 'plan' } as const, 'auto' as Plan)
 const accountPlanAtom = atom({ plugin: 'villager-hp', key: 'accountPlan' } as const, null as string | null)
 const lastPromptAtom = atom({ plugin: 'villager-hp', key: 'lastPrompt' } as const, null as PromptTokens | null)
@@ -63,8 +65,8 @@ export const register: Register = on => {
     await $.command.register({ name: 'revive', description: 'Bring Claude back to your real health (same as /hp off)' })
     await $.command.register({
       name: 'rank',
-      description: 'Change the rank badge on your health card: /rank scout, contributor, innovator, top, god',
-      argumentHint: '[scout | contributor | innovator | top | god]',
+      description: 'Change the badge on your health card: /rank plan shows your account type (default), or scout, contributor, innovator, top, god',
+      argumentHint: '[plan | scout | contributor | innovator | top | god]',
     })
     await $.command.register({
       name: 'pace',
@@ -85,9 +87,9 @@ export const register: Register = on => {
     } catch {
       // Withheld by a privacy mod: auto falls back to the limits the account reports.
     }
-    // The rank you picked, kept across sessions.
-    const saved = await $.store.get('rank')
-    if (typeof saved === 'string' && saved in RANKS) await update($, rankAtom, () => saved as Rank)
+    // The badge you picked, kept across sessions; your account type until you pick a rank.
+    const saved = await $.store.get('badge')
+    if (typeof saved === 'string' && (saved === 'plan' || saved in RANKS)) await update($, badgeAtom, () => saved as Badge)
     const usage = await $.session.usage()
     await update($, limitsAtom, () => usage.rateLimits)
     await update($, nowAtom, () => Date.now())
@@ -110,16 +112,18 @@ export const register: Register = on => {
 
   on('command.run', { command: 'rank' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase().replace(/\s+/g, ' ')
-    const aliases: Record<string, Rank> = { 'top contributor': 'top', 'god mode': 'god', godmode: 'god' }
-    const rank = (arg in RANKS ? arg : aliases[arg]) as Rank | undefined
-    if (!rank) {
-      const current = await read($, rankAtom)
-      const list = (Object.keys(RANKS) as Rank[]).map(r => `${r}${r === current ? ' (yours)' : ''}`).join(', ')
-      return { text: arg ? `No rank called "${arg}". Ranks: ${list}.` : `Your rank: ${RANKS[current].name}. Change it with /rank and one of: ${list}.` }
+    const aliases: Record<string, Badge> = { 'top contributor': 'top', 'god mode': 'god', godmode: 'god', account: 'plan', tier: 'plan', off: 'plan' }
+    const picked = (arg === 'plan' || arg in RANKS ? arg : aliases[arg]) as Badge | undefined
+    const tier = TIERS[accountTier(await ultraNow($), await read($, accountPlanAtom))]
+    const named = (b: Badge) => (b === 'plan' ? `your account type (${tier.name})` : RANKS[b].name)
+    if (!picked) {
+      const current = await read($, badgeAtom)
+      const list = (['plan', ...Object.keys(RANKS)] as Badge[]).map(r => `${r}${r === current ? ' (yours)' : ''}`).join(', ')
+      return { text: arg ? `No badge called "${arg}". Badges: ${list}.` : `Your badge: ${named(current)}. Change it with /rank and one of: ${list}.` }
     }
-    await $.store.set('rank', rank)
-    await update($, rankAtom, () => rank)
-    return { text: `Your badge is now ${RANKS[rank].name}.` }
+    await $.store.set('badge', picked).catch(() => undefined)
+    await update($, badgeAtom, () => picked)
+    return { text: `Your badge is now ${named(picked)}.` }
   })
 
   on('command.run', { command: 'pace' }, async ($, e) => {
@@ -214,6 +218,8 @@ export const register: Register = on => {
     const m = mood(all)
     const pace = weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), now)
     const tokens = await read($, lastPromptAtom)
+    const badge = await read($, badgeAtom)
+    const badgeLook = badge === 'plan' ? TIERS[accountTier(ultra, await read($, accountPlanAtom))] : RANKS[badge]
     // Set while the week is on course to run out, and he is still standing.
     const over = pace !== null && pace.isOver && m !== 'dead' ? pace : null
     const elements = $.ui.resolve(e)
@@ -232,7 +238,7 @@ export const register: Register = on => {
           {below}
           <Svg
             key={`hp-${m}-${over !== null}-${ultra ? paceZone(pace) : 'std'}`}
-            source={hudSvg(all, await read($, rankAtom), over !== null, { ultra: ultra ? { pace } : undefined, tokens })}
+            source={hudSvg(all, badgeLook, over !== null, { ultra: ultra ? { pace } : undefined, tokens })}
             alt={`Claude's health: ${alt}`}
           />
         </Box>

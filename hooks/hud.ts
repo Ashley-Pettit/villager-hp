@@ -539,15 +539,15 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
 }
 
 // The tokens your last prompt used, small, under the rank badge.
-const tokenReadout = (tokens: PromptTokens | null, rank: Rank) => {
+const tokenReadout = (tokens: PromptTokens | null, look: RankLook) => {
   if (tokens === null) return ''
-  const { x, w } = badgeBox(rank)
+  const { x, w } = badgeBox(look)
   return `<text x="${x + w / 2}" y="${HUD_H - 6}" text-anchor="middle" ${UI} font-size="10" font-weight="600" letter-spacing="0.6" fill="${T.muted}">LAST PROMPT <tspan fill="${T.text}" font-weight="700">${fmtTokens(tokens.total)}</tspan></text>`
 }
 
 // The contributor ranks, lowest first, as the draft rank sheet draws them.
 export type Rank = 'scout' | 'contributor' | 'innovator' | 'top' | 'god'
-type RankLook = { label: string; name: string; stops: [string, string, string]; edge: string; ink: string; glow?: string; shine?: true }
+export type RankLook = { label: string; name: string; stops: [string, string, string]; edge: string; ink: string; glow?: string; shine?: true }
 export const RANKS: Record<Rank, RankLook> = {
   scout: { label: '◇ SCOUT', name: 'Scout', stops: ['#d9e2ec', '#9aa9b8', '#6c7b8a'], edge: '#f1f5f9', ink: '#1b2430' },
   contributor: { label: '✦ CONTRIBUTOR', name: 'Contributor', stops: ['#ffd2a8', '#d98a4e', '#a65a26'], edge: '#ffe7d1', ink: '#2e1606' },
@@ -556,18 +556,38 @@ export const RANKS: Record<Rank, RankLook> = {
   god: { label: '⚡ GOD MODE', name: 'GOD MODE', stops: ['#ffe27a', '#f7b733', '#e98a15'], edge: '#fff3c4', ink: '#2b1a03', glow: '#f7b733', shine: true },
 }
 
+// Your Claude account type, the badge the card wears unless you pick a rank.
+export type Tier = 'ultra' | 'max' | 'pro' | 'team' | 'enterprise' | 'free' | 'claude'
+export const TIERS: Record<Tier, RankLook> = {
+  ultra: { label: '⚡ ULTRA', name: 'Ultra', stops: ['#ffe27a', '#f7b733', '#e98a15'], edge: '#fff3c4', ink: '#2b1a03', glow: '#f7b733', shine: true },
+  max: { label: '◆ MAX', name: 'Max', stops: ['#c7f0ff', '#5ec4ff', '#2b8fd6'], edge: '#e6f7ff', ink: '#062033', glow: '#5ec4ff', shine: true },
+  pro: { label: '✦ PRO', name: 'Pro', stops: ['#ffd2a8', '#d98a4e', '#a65a26'], edge: '#ffe7d1', ink: '#2e1606', glow: '#d98a4e' },
+  team: { label: '★ TEAM', name: 'Team', stops: ['#d8c8ff', '#9b7bf0', '#6a4fc4'], edge: '#efe8ff', ink: '#160a33', glow: '#9b7bf0' },
+  enterprise: { label: '★ ENTERPRISE', name: 'Enterprise', stops: ['#d8c8ff', '#9b7bf0', '#6a4fc4'], edge: '#efe8ff', ink: '#160a33', glow: '#9b7bf0' },
+  free: { label: '◇ FREE', name: 'Free', stops: ['#d9e2ec', '#9aa9b8', '#6c7b8a'], edge: '#f1f5f9', ink: '#1b2430' },
+  claude: { label: '✳ CLAUDE', name: 'Claude', stops: ['#f4c7b3', '#d97757', '#b25a3d'], edge: '#fbe3d8', ink: '#2e1206' },
+}
+
+// The account type: Ultra as the card reads it (/ultra), else the plan name
+// the login records ("claude_max", "pro"...), else plain Claude.
+export const accountTier = (ultra: boolean, accountPlan: string | null): Tier => {
+  if (ultra) return 'ultra'
+  const p = (accountPlan ?? '').toLowerCase()
+  for (const t of ['max', 'pro', 'team', 'enterprise', 'free'] as const) if (p.includes(t)) return t
+  return 'claude'
+}
+
 // The rank badge at the card's right end, past the reset times: a badge to
 // show, not a control. Its right edge sits 16 in from the card's, as the
 // avatar's left does; long names get a wider pill.
 const BADGE_H = 26
 const BADGE_Y = 19
-const badgeBox = (rank: Rank) => {
-  const w = Math.min(BADGE_ZONE, Math.max(108, Math.round(RANKS[rank].label.length * 7.6 + 28)))
+const badgeBox = (look: RankLook) => {
+  const w = Math.min(BADGE_ZONE, Math.max(108, Math.round(look.label.length * 7.6 + 28)))
   return { x: 960 - 16 - w, w }
 }
-const rankBadge = (rank: Rank) => {
-  const look = RANKS[rank]
-  const { x, w } = badgeBox(rank)
+const rankBadge = (look: RankLook) => {
+  const { x, w } = badgeBox(look)
   const pill = `<rect x="${x}" y="${BADGE_Y}" width="${w}" height="${BADGE_H}" rx="${BADGE_H / 2}" fill="url(#badgegrad)"/>`
   const shine = look.shine
     ? `<g clip-path="url(#badgeclip)">
@@ -583,9 +603,8 @@ const rankBadge = (rank: Rank) => {
   <text x="${x + w / 2}" y="${BADGE_Y + 17.5}" text-anchor="middle" ${UI} font-size="${look.label.length > 12 ? 11.5 : 12}" font-weight="800" letter-spacing="${look.label.length > 12 ? 0.9 : 1.2}" fill="${look.ink}">${look.label}</text>`
 }
 
-const badgeDefs = (rank: Rank) => {
-  const look = RANKS[rank]
-  const { x, w } = badgeBox(rank)
+const badgeDefs = (look: RankLook) => {
+  const { x, w } = badgeBox(look)
   return `<linearGradient id="badgegrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${look.stops[0]}"/><stop offset="0.55" stop-color="${look.stops[1]}"/><stop offset="1" stop-color="${look.stops[2]}"/></linearGradient>
     <clipPath id="badgeclip"><rect x="${x}" y="${BADGE_Y}" width="${w}" height="${BADGE_H}" rx="${BADGE_H / 2}"/></clipPath>
     <filter id="badgeglow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur in="SourceAlpha" stdDeviation="3" result="b"/><feFlood flood-color="${look.glow ?? '#000'}" flood-opacity="0.55"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`
@@ -613,9 +632,11 @@ const aurora = (colour: string) => `
 // (Ultra), and the last prompt's tokens.
 export type HudExtra = { ultra?: { pace: Pace | null }; tokens?: PromptTokens | null }
 
-export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false, extra: HudExtra = {}) => {
-  // Fit the bars to this badge, so the gap before it is the same for every rank.
-  BAR_W = 960 - 16 - badgeBox(rank).w - BADGE_GAP - 78 - 66 - 16 - BAR_X
+// `badge` is a rank by name, or a look to wear: your account type's (TIERS).
+export const hudSvg = (all: Bar[], badge: Rank | RankLook = 'god', isOverPace = false, extra: HudExtra = {}) => {
+  const look = typeof badge === 'string' ? RANKS[badge] : badge
+  // Fit the bars to this badge, so the gap before it is the same for every badge.
+  BAR_W = 960 - 16 - badgeBox(look).w - BADGE_GAP - 78 - 66 - 16 - BAR_X
   VALUE_X = BAR_X + BAR_W + 16
   const m = mood(all)
   const dead = killer(all)
@@ -648,7 +669,7 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false, extra
     <linearGradient id="scanband" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${HUD_CYAN}" stop-opacity="0"/><stop offset="0.5" stop-color="${HUD_CYAN}" stop-opacity="0.09"/><stop offset="1" stop-color="${HUD_CYAN}" stop-opacity="0"/></linearGradient>
     <radialGradient id="cardglow" cx="0.04" cy="0.5" r="0.32"><stop offset="0" stop-color="${glow}" stop-opacity="0.16"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient>
     <radialGradient id="avbg" cx="0.5" cy="0.3" r="0.8"><stop offset="0" stop-color="#4b7d46"/><stop offset="0.65" stop-color="#2b4a2c"/><stop offset="1" stop-color="#1b2f1d"/></radialGradient>
-    ${badgeDefs(rank)}
+    ${badgeDefs(look)}
     <clipPath id="avclip"><circle cx="${AV.cx}" cy="${AV.cy}" r="${AV.r - 1}"/></clipPath>
     <filter id="soft" x="-5%" y="-80%" width="110%" height="260%"><feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <pattern id="stripes" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
@@ -670,8 +691,8 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false, extra
   ${avatar(m, low)}
   ${isOverPace && m !== 'dead' ? paceBadge() : ''}
   ${rows}
-  ${rankBadge(rank)}
-  ${tokenReadout(extra.tokens ?? null, rank)}
+  ${rankBadge(look)}
+  ${tokenReadout(extra.tokens ?? null, look)}
   ${cornerBrackets()}
   ${deathScreen}
   </g>

@@ -61,7 +61,9 @@ On an Ultra plan the 5-hour window doesn't apply, so the card hides the **SESSIO
 
 The card works this out by itself (a weekly limit with no 5-hour one, or "ultra" in the account's plan name). To set it by hand, type `/ultra on`, `/ultra off` or `/ultra auto`.
 
-Under the rank badge, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included. `/hp` gives the breakdown.
+The badge on the right shows your Claude account type (ULTRA, MAX, PRO, TEAM...). Prefer a rank? `/rank god` (or scout, contributor, innovator, top); `/rank plan` goes back to your account type.
+
+Under the badge, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included. `/hp` gives the breakdown.
 
 ## What it does
 
