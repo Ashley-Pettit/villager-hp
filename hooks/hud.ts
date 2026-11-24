@@ -127,7 +127,8 @@ export const emptyTokens = (): PromptTokens => ({ total: 0, input: 0, output: 0,
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
 
 export const HUD_W = 960
-export const HUD_H = 64
+// 64 for two rows, 88 for three; hudSvg sets it for the card it draws.
+export let HUD_H = 64
 // A little air above the card, in the same units. Outside the card's own
 // coordinates, so nothing on it moves.
 export const HUD_PAD_TOP = 6
@@ -143,7 +144,7 @@ const BADGE_GAP = 24 // between the reset times and the badge zone
 let BAR_W = 960 - 16 - BADGE_ZONE - BADGE_GAP - 78 - 66 - 16 - 172
 const BAR_H = 12
 let VALUE_X = BAR_X + BAR_W + 16
-const ROW_CY = [20, 44] // the two rows' centre lines
+const ROW_CY = [20, 44, 68] // the rows' centre lines, top down
 const UI = `font-family="'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif"`
 
 const T = {
@@ -628,9 +629,10 @@ const aurora = (colour: string) => `
   <radialGradient id="aura"><stop offset="0" stop-color="${colour}" stop-opacity="0.16"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient>
   <radialGradient id="aura2"><stop offset="0" stop-color="#3b82f6" stop-opacity="0.10"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/></radialGradient>`
 
-// What the card adds beyond the bars: the pace bar in place of SESSION
-// (Ultra), and the last prompt's tokens.
-export type HudExtra = { ultra?: { pace: Pace | null }; tokens?: PromptTokens | null }
+// What the card adds beyond the bars: the weekly pace bar under WEEKLY
+// (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
+// the last prompt's tokens.
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; tokens?: PromptTokens | null }
 
 // `badge` is a rank by name, or a look to wear: your account type's (TIERS).
 export const hudSvg = (all: Bar[], badge: Rank | RankLook = 'god', isOverPace = false, extra: HudExtra = {}) => {
@@ -644,19 +646,26 @@ export const hudSvg = (all: Bar[], badge: Rank | RankLook = 'god', isOverPace = 
   const low = known.length === 0 ? null : Math.min(...known)
   const session = all.find(b => b.label === 'SESSION') ?? { label: 'SESSION' as const, hp: null, respawn: '' }
   const weekly = all.find(b => b.label === 'WEEKLY') ?? { label: 'WEEKLY' as const, hp: null, respawn: '' }
-  // Ultra: WEEKLY on top, the pace bar under it; else SESSION then WEEKLY.
-  const rows = extra.ultra
-    ? `${row(weekly, ROW_CY[0] ?? 20, 'g1', 0.15)}${paceRow(extra.ultra.pace, ROW_CY[1] ?? 44, 0.35)}`
-    : `${row(session, ROW_CY[0] ?? 20, 'g0', 0.15)}${row(weekly, ROW_CY[1] ?? 44, 'g1', 0.35)}`
+  // SESSION (unless Ultra), WEEKLY, then PACE when there is a pace to show.
+  const drawers = [
+    ...(extra.hideSession ? [] : [(cy: number, d: number) => row(session, cy, 'g0', d)]),
+    (cy: number, d: number) => row(weekly, cy, 'g1', d),
+    ...(extra.pace !== undefined ? [(cy: number, d: number) => paceRow(extra.pace ?? null, cy, d)] : []),
+  ]
+  // A third row makes the card taller; the avatar and badge drop to its middle.
+  HUD_H = drawers.length > 2 ? 88 : 64
+  const dy = (HUD_H - 64) / 2
+  const rows = drawers.map((draw, i) => draw(ROW_CY[i] ?? 20, 0.15 + i * 0.2)).join('')
+  const mid = (svg: string) => (dy ? `<g transform="translate(0 ${dy})">${svg}</g>` : svg)
   const glow = (m === 'dead' ? '#59616d' : low === null ? '#3a4350' : T[tone(low)][0]) ?? '#3a4350'
 
   const deathScreen = dead
     ? `<g>
         <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="#0b0d11" opacity="0.9"/>
         <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="none" stroke="#ef4444" stroke-opacity="0.55"/>
-        ${avatar(m, 0)}
-        <text x="${ICON_X}" y="29" ${UI} font-size="18" font-weight="700" fill="${T.text}">Claude has been defeated<animate attributeName="opacity" values="0;1" dur="0.8s" fill="freeze"/></text>
-        <text x="${ICON_X}" y="49" ${UI} font-size="13" fill="${T.muted}">Out of ${dead.label === 'SESSION' ? 'session' : 'weekly'} hit points · ${backIn(dead.respawn)}</text>
+        ${mid(avatar(m, 0))}
+        <text x="${ICON_X}" y="${29 + dy}" ${UI} font-size="18" font-weight="700" fill="${T.text}">Claude has been defeated<animate attributeName="opacity" values="0;1" dur="0.8s" fill="freeze"/></text>
+        <text x="${ICON_X}" y="${49 + dy}" ${UI} font-size="13" fill="${T.muted}">Out of ${dead.label === 'SESSION' ? 'session' : 'weekly'} hit points · ${backIn(dead.respawn)}</text>
       </g>`
     : ''
 
@@ -687,11 +696,9 @@ export const hudSvg = (all: Bar[], badge: Rank | RankLook = 'god', isOverPace = 
   <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="url(#cardglow)"/>
   <line x1="14" y1="1.5" x2="${HUD_W - 14}" y2="1.5" stroke="#ffffff" stroke-opacity="0.06"/>
   ${hologram()}
-  ${radar(m)}
-  ${avatar(m, low)}
-  ${isOverPace && m !== 'dead' ? paceBadge() : ''}
+  ${mid(radar(m) + avatar(m, low) + (isOverPace && m !== 'dead' ? paceBadge() : ''))}
   ${rows}
-  ${rankBadge(look)}
+  ${mid(rankBadge(look))}
   ${tokenReadout(extra.tokens ?? null, look)}
   ${cornerBrackets()}
   ${deathScreen}

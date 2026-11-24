@@ -49,17 +49,19 @@ Good to know:
 
 ## What you see
 
-Two bars, **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit across all models), show the hit points you have left. HP is 100 minus the percent used, with the time each one resets. An Age of Empires–style villager watches over them, and his mood follows your lowest bar.
+Three bars: **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit across all models) show the hit points you have left, and **PACE** shows whether this week's rate gets you to the reset. On Ultra, SESSION is hidden (see below). HP is 100 minus the percent used, with the time each one resets. An Age of Empires–style villager watches over them, and his mood follows your lowest bar.
 
-## Ultra accounts
+## Weekly pace bar
 
-On an Ultra plan the 5-hour window doesn't apply, so the card hides the **SESSION** bar and shows **PACE** under **WEEKLY** instead:
+**PACE** sits under **WEEKLY**:
 
 - The middle line is on track: at this rate you use exactly your weekly limit by the reset.
 - The marker sits **right** of the middle when you have plenty spare, and **left** when you'll hit the cap before the reset.
 - Beside it: the percent of the limit you'd use by the reset, and "42% spare", "on track" or "cap Wed 8am".
 
-The card works this out by itself (a weekly limit with no 5-hour one, or "ultra" in the account's plan name). To set it by hand, type `/ultra on`, `/ultra off` or `/ultra auto`.
+## Ultra accounts
+
+On an Ultra plan the 5-hour window doesn't apply, so the card hides **SESSION** and shows just **WEEKLY** and **PACE**. The card works this out by itself (a weekly limit with no 5-hour one, or "ultra" in the account's plan name). To set it by hand, type `/ultra on`, `/ultra off` or `/ultra auto`.
 
 The badge on the right shows your Claude account type (ULTRA, MAX, PRO, TEAM...). Prefer a rank? `/rank god` (or scout, contributor, innovator, top); `/rank plan` goes back to your account type.
 

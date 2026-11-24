@@ -237,8 +237,8 @@ export const register: Register = on => {
         <Box flexDirection="column">
           {below}
           <Svg
-            key={`hp-${m}-${over !== null}-${ultra ? paceZone(pace) : 'std'}`}
-            source={hudSvg(all, badgeLook, over !== null, { ultra: ultra ? { pace } : undefined, tokens })}
+            key={`hp-${m}-${over !== null}-${paceZone(pace)}-${ultra}`}
+            source={hudSvg(all, badgeLook, over !== null, { pace, hideSession: ultra, tokens })}
             alt={`Claude's health: ${alt}`}
           />
         </Box>
@@ -273,7 +273,7 @@ export const register: Register = on => {
                 )}
               </Box>
             ))}
-            {ultra ? (
+            {dead === undefined ? (
               <Box flexDirection="row">
                 <Text>{'       '}</Text>
                 <Text bold color="#d4ab52">{'PACE'.padEnd(8)}</Text>

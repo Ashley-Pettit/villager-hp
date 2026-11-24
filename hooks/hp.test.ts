@@ -99,7 +99,9 @@ test('desktop: /pace over floats the hourglass by the villager, and /pace ok tak
   expect(over).toMatch(/M -2\.6,-3\.6 L 2\.6,-3\.6/)
   expect(ok).not.toMatch(/M -2\.6,-3\.6 L 2\.6,-3\.6/)
   // The villager is drawn the same either way: the hourglass is added, nothing of him changes.
-  expect(over.replace(/<g>\s*<animateTransform attributeName="transform" type="translate" values="0 0;0 -1\.2;0 0"[\s\S]*?<\/g><\/g>\s*<\/g>/, '').replace(/\s+/g, '')).toBe(ok.replace(/\s+/g, ''))
+  const villager = (svg: string) => svg.match(/<g clip-path="url\(#avclip\)">[\s\S]*?<\/g>\s*<circle/)?.[0]
+  expect(villager(over)).toBeDefined()
+  expect(villager(over)).toBe(villager(ok))
 })
 
 test('desktop: a dead villager gets no hourglass', async ($, on) => {
@@ -162,7 +164,11 @@ test('desktop: /ultra on swaps SESSION for the PACE bar', async ($, on) => {
   await $.command.run(hp('64'))
   const card = async () => String((await ui.find({ type: 'Svg' }))?.props.source)
 
-  expect(await card()).toMatch(/>SESSION</)
+  // Not Ultra: three bars, SESSION, WEEKLY and PACE, on a taller card.
+  const standard = await card()
+  expect(standard).toMatch(/>SESSION</)
+  expect(standard).toMatch(/>PACE</)
+  expect(standard).toMatch(/viewBox="0 0 960 94"/)
   await $.command.run(ultraCmd('on'))
   const ultra = await card()
   expect(ultra).not.toMatch(/>SESSION</)
@@ -199,4 +205,14 @@ test('desktop: the badge shows the account type, ULTRA on Ultra, until a rank is
   expect(await card()).toMatch(/GOD MODE/)
   await $.command.run({ ...hp('plan'), command: 'rank' })
   expect(await card()).toMatch(/⚡ ULTRA/)
+})
+
+test('terminal: not Ultra draws SESSION, WEEKLY and PACE rows', async ($, on) => {
+  statusRow(on)
+  const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await $.command.run(hp('64'))
+
+  expect(await ui.find({ type: 'Text', text: /^SESSION/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^WEEKLY/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^PACE/ })).toBeDefined()
 })
