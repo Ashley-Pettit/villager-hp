@@ -1,4 +1,4 @@
-import type { Limit } from '../types'
+import type { Limit, Plan, PromptTokens } from '../types'
 
 // Turns the account's rate-limit windows into two game health bars, and
 // draws them as an SVG HUD for surfaces that draw Svg.
@@ -82,6 +82,47 @@ export const weeklyPace = (limits: Limit[], demo: boolean | null, now: number): 
 
 // "out in 2h 50m", "out by Thu 3pm"
 export const outBy = (runsOut: string) => (/^\d/.test(runsOut) ? `out in ${runsOut}` : `out by ${runsOut}`)
+
+// ---- Ultra: no 5-hour window, so the card swaps SESSION for a weekly pace bar ----
+
+// /plan ultra or /plan standard decides; on auto, the login's plan name says
+// so, or the limits do: a weekly window reported with no 5-hour one beside it.
+export const isUltra = (plan: Plan, accountPlan: string | null, limits: Limit[]) => {
+  if (plan !== 'auto') return plan === 'ultra'
+  if (accountPlan !== null && /ultra/i.test(accountPlan)) return true
+  return limits.some(l => l.kind === KINDS.WEEKLY) && !limits.some(l => l.kind === KINDS.SESSION)
+}
+
+// How far the week's use is from an even spread, in points of the limit left
+// at the reset: +22 is 22% spare, -30 is hitting the cap early. Within this
+// many points either way reads as on track.
+export const PACE_SLACK = 5
+export type PaceZone = 'plenty' | 'track' | 'cap' | 'unknown'
+export const paceZone = (pace: Pace | null): PaceZone =>
+  pace === null ? 'unknown' : pace.projected > 100 + PACE_SLACK ? 'cap' : pace.projected < 100 - PACE_SLACK ? 'plenty' : 'track'
+
+// Where the marker sits on the pace bar, 0 (left, at the cap) to 1 (right,
+// plenty left), on track in the middle: 100% used by the reset. Linear, so
+// 0% used by the reset is the right end and 200% the left.
+export const pacePosition = (pace: Pace | null) =>
+  pace === null ? 0.5 : Math.min(1, Math.max(0, 0.5 + (100 - pace.projected) / 200))
+
+// The pace in a few words: "22% spare", "on track", "cap Thu 3pm".
+export const paceShort = (pace: Pace | null) => {
+  const zone = paceZone(pace)
+  if (pace === null || zone === 'unknown') return 'too early'
+  if (zone === 'track') return 'on track'
+  if (zone === 'plenty') return `${100 - pace.projected}% spare`
+  // To the hour, so it fits its chip: "cap Wed 8am", "cap in 23h".
+  const when = pace.runsOut.replace(/:\d\d(?=[ap]m)/, '').replace(/ \d+m$/, '')
+  return when ? (/^\d/.test(when) ? `cap in ${when}` : `cap ${when}`) : 'over pace'
+}
+
+// 950, 12.4k, 1.25M
+export const fmtTokens = (n: number) =>
+  n < 1000 ? `${n}` : n < 1_000_000 ? `${(n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, '')}k` : `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`
+
+export const emptyTokens = (): PromptTokens => ({ total: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
 
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
 
@@ -450,6 +491,60 @@ const row = (bar: Bar, cy: number, id: string, delay: number) => {
   return icon + label + track + fill + ticks + fx + value + chip
 }
 
+// The weekly pace bar: a track red at the left (the cap), green at the right
+// (plenty spare), a line at the middle for on track, and a marker that slides
+// out from the middle to where this week's rate lands.
+const PACE_COLOUR: Record<PaceZone, string> = { plenty: '#22c55e', track: HUD_CYAN, cap: '#ef4444', unknown: T.faint }
+const gaugeIcon = (x: number, cy: number, fill: string) =>
+  `<g transform="translate(${x} ${cy - 6})"><path d="M 1,10 A 5.5,5.5 0 1 1 12,10" fill="none" stroke="${fill}" stroke-width="1.5" stroke-linecap="round"/><path d="M 6.5,9.5 L 9.5,4.5" stroke="${fill}" stroke-width="1.6" stroke-linecap="round"/><circle cx="6.5" cy="9.5" r="1.4" fill="${fill}"/></g>`
+
+const paceRow = (pace: Pace | null, cy: number, delay: number) => {
+  const zone = paceZone(pace)
+  const colour = PACE_COLOUR[zone]
+  const top = cy - BAR_H / 2
+  const mid = BAR_X + BAR_W / 2
+  const half = BAR_H / 2
+  const x = Math.round(BAR_X + half + pacePosition(pace) * (BAR_W - BAR_H))
+  const sweep = `begin="${delay}s" dur="1.1s" calcMode="spline" keyTimes="0;1" keySplines="0.16 1 0.3 1" fill="freeze"`
+  const icon = gaugeIcon(ICON_X, cy, colour)
+  const label = `<text x="${LABEL_X}" y="${cy + 4}" ${UI} font-size="11.5" font-weight="700" letter-spacing="1.4" fill="${T.muted}">PACE</text>`
+  const track = `<rect x="${BAR_X}" y="${top}" width="${BAR_W}" height="${BAR_H}" rx="${half}" fill="${T.track}" stroke="${T.trackEdge}" stroke-width="1"/>
+    <rect x="${BAR_X}" y="${top}" width="${BAR_W}" height="${BAR_H}" rx="${half}" fill="url(#pacegrad)" opacity="0.32"/>`
+  const ends = `<text x="${BAR_X + 8}" y="${cy + 3.5}" ${UI} font-size="9" font-weight="700" letter-spacing="1" fill="#fca5a5" opacity="0.75">CAP</text>
+    <text x="${BAR_X + BAR_W - 8}" y="${cy + 3.5}" text-anchor="end" ${UI} font-size="9" font-weight="700" letter-spacing="1" fill="#86efac" opacity="0.75">SPARE</text>`
+  const centre = `<line x1="${mid}" y1="${top - 3}" x2="${mid}" y2="${top + BAR_H + 3}" stroke="${T.text}" stroke-width="1.6" stroke-opacity="0.75" stroke-linecap="round"/>`
+  // The stretch between on track and this week's rate, filled in the zone's colour.
+  const from = Math.min(mid, x)
+  const span = Math.abs(x - mid)
+  const reach =
+    pace !== null && span > 1
+      ? `<rect x="${mid}" y="${top + 2}" width="0" height="${BAR_H - 4}" rx="2" fill="${colour}" opacity="0.55">
+          <animate attributeName="width" values="0;${span}" ${sweep}/>
+          ${x < mid ? `<animate attributeName="x" values="${mid};${from}" ${sweep}/>` : ''}
+        </rect>`
+      : ''
+  const pulse = zone === 'cap' ? `<animate attributeName="r" values="7;8.5;7" dur="0.9s" repeatCount="indefinite"/>` : ''
+  const marker = `<circle cx="${mid}" cy="${cy}" r="11" fill="${colour}" opacity="${pace === null ? 0.12 : 0.3}" filter="url(#soft)"><animate attributeName="cx" values="${mid};${x}" ${sweep}/></circle>
+    <circle cx="${mid}" cy="${cy}" r="7" fill="${pace === null ? T.track : colour}" stroke="#ffffff" stroke-width="1.8" stroke-opacity="${pace === null ? 0.35 : 0.95}">${pulse}<animate attributeName="cx" values="${mid};${x}" ${sweep}/></circle>`
+  const value =
+    pace === null
+      ? `<text x="${VALUE_X}" y="${cy + 5}" ${UI} font-size="15" font-weight="600" fill="${T.faint}">—</text>`
+      : `<text x="${VALUE_X}" y="${cy + 5.5}" ${UI} font-size="17" font-weight="700" fill="${zone === 'track' ? T.text : colour}">${pace.projected}<tspan font-size="12" font-weight="600" fill="${T.muted}">%</tspan></text>`
+  const chipText = paceShort(pace)
+  const chipX = VALUE_X + 66
+  const CHIP_W = 78
+  const chip = `<rect x="${chipX}" y="${cy - 10}" width="${CHIP_W}" height="20" rx="10" fill="${T.chip}" stroke="${zone === 'cap' ? T.red[0] : T.trackEdge}" stroke-opacity="${zone === 'cap' ? 0.7 : 1}"/>
+     <text x="${chipX + CHIP_W / 2}" y="${cy + 4.5}" text-anchor="middle" ${UI} font-size="${chipText.length > 9 ? 11 : 12.5}" font-weight="500" fill="${zone === 'cap' ? '#fca5a5' : T.muted}">${chipText}</text>`
+  return icon + label + track + ends + reach + centre + marker + value + chip
+}
+
+// The tokens your last prompt used, small, under the rank badge.
+const tokenReadout = (tokens: PromptTokens | null, rank: Rank) => {
+  if (tokens === null) return ''
+  const { x, w } = badgeBox(rank)
+  return `<text x="${x + w / 2}" y="${HUD_H - 6}" text-anchor="middle" ${UI} font-size="10" font-weight="600" letter-spacing="0.6" fill="${T.muted}">LAST PROMPT <tspan fill="${T.text}" font-weight="700">${fmtTokens(tokens.total)}</tspan></text>`
+}
+
 // The contributor ranks, lowest first, as the draft rank sheet draws them.
 export type Rank = 'scout' | 'contributor' | 'innovator' | 'top' | 'god'
 type RankLook = { label: string; name: string; stops: [string, string, string]; edge: string; ink: string; glow?: string; shine?: true }
@@ -514,7 +609,11 @@ const aurora = (colour: string) => `
   <radialGradient id="aura"><stop offset="0" stop-color="${colour}" stop-opacity="0.16"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient>
   <radialGradient id="aura2"><stop offset="0" stop-color="#3b82f6" stop-opacity="0.10"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/></radialGradient>`
 
-export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false) => {
+// What the card adds beyond the bars: the pace bar in place of SESSION
+// (Ultra), and the last prompt's tokens.
+export type HudExtra = { ultra?: { pace: Pace | null }; tokens?: PromptTokens | null }
+
+export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false, extra: HudExtra = {}) => {
   // Fit the bars to this badge, so the gap before it is the same for every rank.
   BAR_W = 960 - 16 - badgeBox(rank).w - BADGE_GAP - 78 - 66 - 16 - BAR_X
   VALUE_X = BAR_X + BAR_W + 16
@@ -522,8 +621,12 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false) => {
   const dead = killer(all)
   const known = all.flatMap(b => (b.hp === null ? [] : [b.hp]))
   const low = known.length === 0 ? null : Math.min(...known)
-  const session = all[0] ?? { label: 'SESSION' as const, hp: null, respawn: '' }
-  const weekly = all[1] ?? { label: 'WEEKLY' as const, hp: null, respawn: '' }
+  const session = all.find(b => b.label === 'SESSION') ?? { label: 'SESSION' as const, hp: null, respawn: '' }
+  const weekly = all.find(b => b.label === 'WEEKLY') ?? { label: 'WEEKLY' as const, hp: null, respawn: '' }
+  // Ultra: WEEKLY on top, the pace bar under it; else SESSION then WEEKLY.
+  const rows = extra.ultra
+    ? `${row(weekly, ROW_CY[0] ?? 20, 'g1', 0.15)}${paceRow(extra.ultra.pace, ROW_CY[1] ?? 44, 0.35)}`
+    : `${row(session, ROW_CY[0] ?? 20, 'g0', 0.15)}${row(weekly, ROW_CY[1] ?? 44, 'g1', 0.35)}`
   const glow = (m === 'dead' ? '#59616d' : low === null ? '#3a4350' : T[tone(low)][0]) ?? '#3a4350'
 
   const deathScreen = dead
@@ -555,6 +658,7 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false) => {
     <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
     ${gradient('g0', session.hp)}
     ${gradient('g1', weekly.hp)}
+    <linearGradient id="pacegrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${T.red[0]}"/><stop offset="0.35" stop-color="${T.amber[0]}"/><stop offset="0.5" stop-color="${HUD_CYAN}"/><stop offset="1" stop-color="${T.green[0]}"/></linearGradient>
   </defs>
   <g transform="translate(0 ${HUD_PAD_TOP})" clip-path="url(#frameclip)">
   <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="url(#card)" stroke="#2a313b"/>
@@ -565,9 +669,9 @@ export const hudSvg = (all: Bar[], rank: Rank = 'god', isOverPace = false) => {
   ${radar(m)}
   ${avatar(m, low)}
   ${isOverPace && m !== 'dead' ? paceBadge() : ''}
-  ${row(session, ROW_CY[0] ?? 20, 'g0', 0.15)}
-  ${row(weekly, ROW_CY[1] ?? 44, 'g1', 0.35)}
+  ${rows}
   ${rankBadge(rank)}
+  ${tokenReadout(extra.tokens ?? null, rank)}
   ${cornerBrackets()}
   ${deathScreen}
   </g>

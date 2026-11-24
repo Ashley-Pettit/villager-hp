@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Limit } from '../types'
-import { RANKS, backIn, bars, hudSvg, killer, mood, outBy, weeklyPace } from './hud'
+import type { Limit, Plan, PromptTokens } from '../types'
+import { RANKS, backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, outBy, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace, Rank } from './hud'
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
@@ -10,11 +10,15 @@ const demoAtom = atom({ plugin: 'villager-hp', key: 'demo' } as const, null as n
 const paceDemoAtom = atom({ plugin: 'villager-hp', key: 'paceDemo' } as const, null as boolean | null)
 const nowAtom = atom({ plugin: 'villager-hp', key: 'now' } as const, 0)
 const rankAtom = atom({ plugin: 'villager-hp', key: 'rank' } as const, 'god' as Rank)
+const planAtom = atom({ plugin: 'villager-hp', key: 'plan' } as const, 'auto' as Plan)
+const accountPlanAtom = atom({ plugin: 'villager-hp', key: 'accountPlan' } as const, null as string | null)
+const lastPromptAtom = atom({ plugin: 'villager-hp', key: 'lastPrompt' } as const, null as PromptTokens | null)
+const PLANS: readonly Plan[] = ['auto', 'ultra', 'standard']
 
 const FACES = { healthy: '(◕‿◕)', hurt: '(•_•)', critical: '(╥﹏╥)', dead: '(x_x)', unknown: '(•‿•)' }
 const SEGMENTS = 20
 // Named by /hp, to tell at a glance which version is loaded.
-const VERSION = '2.8: weekly pace hourglass; the villager stays cheerful for longer'
+const VERSION = '2.9: Ultra hides SESSION for a weekly pace bar; last prompt tokens'
 // AoE-style: green for what's left, red for what's gone.
 const split = (hp: number) => {
   const full = Math.round((hp / 100) * SEGMENTS)
@@ -28,6 +32,24 @@ const paceLine = (pace: Pace | null) =>
     : pace.isOver
       ? `Weekly pace: over. At this rate you're ${outBy(pace.runsOut)}, before the week resets (about ${pace.projected}% of the limit by then).`
       : `Weekly pace: on track. At this rate about ${pace.projected}% of the limit is used by the reset.`
+
+const tokensLine = (t: PromptTokens | null) =>
+  t === null
+    ? 'Last prompt: no tokens counted yet.'
+    : `Last prompt: ${t.total.toLocaleString()} tokens (${fmtTokens(t.input)} in, ${fmtTokens(t.output)} out, ${fmtTokens(t.cacheRead)} cache read, ${fmtTokens(t.cacheWrite)} cache write).`
+
+// The pace bar in text, for the terminal: cap ├────┼──●───┤ spare
+const PACE_CELLS = 21
+const paceTrack = (pace: Pace | null) => {
+  const at = Math.round(pacePosition(pace) * (PACE_CELLS - 1))
+  const mid = (PACE_CELLS - 1) / 2
+  const cells = Array.from({ length: PACE_CELLS }, (_, i) => (i === mid ? '┼' : '─'))
+  return { left: cells.slice(0, at).join(''), dot: pace === null ? '○' : '●', right: cells.slice(at + 1).join('') }
+}
+const PACE_TINT = { plenty: '#3fd23f', track: '#5ec4ff', cap: '#ef4444', unknown: '#8f9aa7' } as const
+
+// Whether the card draws for Ultra, read once per call.
+const ultraNow = async ($: EngineInterface) => isUltra(await read($, planAtom), await read($, accountPlanAtom), await read($, limitsAtom))
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -49,6 +71,20 @@ export const register: Register = on => {
       description: 'Whether your weekly limit lasts at this rate, or preview the warning: /pace over, /pace ok, /pace off for the real one',
       argumentHint: '[over | ok | off]',
     })
+    await $.command.register({
+      name: 'ultra',
+      description: 'Ultra layout: hide the 5-hour bar and show weekly pace instead. /ultra on, /ultra off, /ultra auto',
+      argumentHint: '[on | off | auto]',
+    })
+    const savedPlan = await $.store.get('plan')
+    if (typeof savedPlan === 'string' && (PLANS as readonly string[]).includes(savedPlan)) await update($, planAtom, () => savedPlan as Plan)
+    // The login's plan name, where the engine hands it over; auto mode reads "ultra" in it.
+    try {
+      const id = await $.session.identity()
+      await update($, accountPlanAtom, () => id.organizationType ?? null)
+    } catch {
+      // Withheld by a privacy mod: auto falls back to the limits the account reports.
+    }
     // The rank you picked, kept across sessions.
     const saved = await $.store.get('rank')
     if (typeof saved === 'string' && saved in RANKS) await update($, rankAtom, () => saved as Rank)
@@ -97,6 +133,45 @@ export const register: Register = on => {
     return { text: paceLine(weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), Date.now())) }
   })
 
+  on('command.run', { command: 'ultra' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    const picked: Record<string, Plan> = { on: 'ultra', ultra: 'ultra', off: 'standard', standard: 'standard', auto: 'auto' }
+    const next = picked[arg]
+    if (next !== undefined) {
+      await $.store.set('plan', next).catch(() => undefined)
+      await update($, planAtom, () => next)
+    } else if (arg !== '') return { text: 'Use /ultra on, /ultra off or /ultra auto.' }
+    const plan = await read($, planAtom)
+    const ultra = await ultraNow($)
+    return {
+      text: `Plan: ${plan}${plan === 'auto' ? ` (reading as ${ultra ? 'Ultra' : 'standard'})` : ''}. ${ultra ? 'The 5-hour SESSION bar is hidden; the PACE bar shows your weekly pace.' : 'SESSION and WEEKLY bars shown.'}`,
+    }
+  })
+
+  // Tokens for the most recent prompt: start over when you send one, then add
+  // every model turn it runs, subagents too, so the count grows while it works.
+  on('prompt.submit', async ($, e, next) => {
+    const result = await next(e)
+    // Never hold up your prompt over a counter.
+    await update($, lastPromptAtom, () => emptyTokens()).catch(() => undefined)
+    return result
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const u = e.usage
+    if (u !== undefined) {
+      await update($, lastPromptAtom, prev => {
+        const t = prev ?? emptyTokens()
+        const input = t.input + u.input_tokens
+        const output = t.output + u.output_tokens
+        const cacheRead = t.cacheRead + u.cache_read_input_tokens
+        const cacheWrite = t.cacheWrite + u.cache_creation_input_tokens
+        return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite }
+      })
+    }
+    return next(e)
+  })
+
   // Fresh readings arrive after each turn and whenever a window moves a point.
   on('session.measure', async ($, e, next) => {
     await update($, limitsAtom, () => e.rateLimits)
@@ -116,12 +191,14 @@ export const register: Register = on => {
       await update($, demoAtom, () => Math.round(n))
       return { text: n <= 0 ? 'Preview: Claude is dead. /hp off to revive.' : `Preview: both bars at ${Math.round(n)} HP. /hp off for real readings.` }
     }
-    const all = bars(await read($, limitsAtom), await read($, demoAtom), Date.now())
+    const ultra = await ultraNow($)
+    const all = bars(await read($, limitsAtom), await read($, demoAtom), Date.now()).filter(b => !(ultra && b.label === 'SESSION'))
     return {
       text: [
         ...all.map(b => `${b.label}: ${b.hp === null ? 'no reading yet' : `${b.hp}/100 HP${b.respawn ? `, resets in ${b.respawn}` : ''}`}`),
         paceLine(weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), Date.now())),
-        `(villager-hp ${VERSION})`,
+        tokensLine(await read($, lastPromptAtom)),
+        `(villager-hp ${VERSION}${ultra ? ', Ultra layout' : ''})`,
       ].join('\n'),
     }
   })
@@ -131,9 +208,12 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return below
 
     const now = (await read($, nowAtom)) || Date.now()
-    const all = bars(await read($, limitsAtom), await read($, demoAtom), now)
+    const ultra = await ultraNow($)
+    // On Ultra the 5-hour window doesn't apply: drop it, so it neither draws nor sets his mood.
+    const all = bars(await read($, limitsAtom), await read($, demoAtom), now).filter(b => !(ultra && b.label === 'SESSION'))
     const m = mood(all)
     const pace = weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), now)
+    const tokens = await read($, lastPromptAtom)
     // Set while the week is on course to run out, and he is still standing.
     const over = pace !== null && pace.isOver && m !== 'dead' ? pace : null
     const elements = $.ui.resolve(e)
@@ -143,11 +223,18 @@ export const register: Register = on => {
     // carry an element its surface draws as nothing.
     if (e.surface !== 'terminal' && 'Svg' in elements) {
       const { Box, Svg } = elements
-      const alt = all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') + (over !== null ? `, on course to be ${outBy(over.runsOut)}` : '')
+      const alt =
+        all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
+        (ultra ? `, weekly pace ${paceShort(pace)}` : over !== null ? `, on course to be ${outBy(over.runsOut)}` : '') +
+        (tokens !== null ? `, last prompt ${fmtTokens(tokens.total)} tokens` : '')
       return (
         <Box flexDirection="column">
           {below}
-          <Svg key={`hp-${m}-${over !== null}`} source={hudSvg(all, await read($, rankAtom), over !== null)} alt={`Claude's health: ${alt}`} />
+          <Svg
+            key={`hp-${m}-${over !== null}-${ultra ? paceZone(pace) : 'std'}`}
+            source={hudSvg(all, await read($, rankAtom), over !== null, { ultra: ultra ? { pace } : undefined, tokens })}
+            alt={`Claude's health: ${alt}`}
+          />
         </Box>
       )
     }
@@ -175,11 +262,36 @@ export const register: Register = on => {
                     <Text color="#a01d14">{split(b.hp).red}</Text>
                     <Text color="#f1e3c0" bold>{` ${b.hp}/100`}</Text>
                     <Text color="#cdbb94">{b.respawn ? `  ${b.respawn}` : ''}</Text>
-                    {over !== null && b.label === 'WEEKLY' ? <Text color="#f59e0b">{`  ⏳ ${outBy(over.runsOut)}`}</Text> : null}
+                    {over !== null && b.label === 'WEEKLY' && !ultra ? <Text color="#f59e0b">{`  ⏳ ${outBy(over.runsOut)}`}</Text> : <></>}
                   </>
                 )}
               </Box>
             ))}
+            {ultra ? (
+              <Box flexDirection="row">
+                <Text>{'       '}</Text>
+                <Text bold color="#d4ab52">{'PACE'.padEnd(8)}</Text>
+                <Text color="#fca5a5">{'cap '}</Text>
+                <Text color="#8f9aa7">{paceTrack(pace).left}</Text>
+                <Text bold color={PACE_TINT[paceZone(pace)]}>{paceTrack(pace).dot}</Text>
+                <Text color="#8f9aa7">{paceTrack(pace).right}</Text>
+                <Text color="#86efac">{' spare'}</Text>
+                <Text color="#f1e3c0" bold>{pace === null ? '  —' : `  ${pace.projected}%`}</Text>
+                <Text color={PACE_TINT[paceZone(pace)]}>{`  ${paceShort(pace)}`}</Text>
+              </Box>
+            ) : (
+              <></>
+            )}
+            {tokens !== null ? (
+              <Box flexDirection="row">
+                <Text>{'       '}</Text>
+                <Text bold color="#d4ab52">{'PROMPT'.padEnd(8)}</Text>
+                <Text color="#f1e3c0" bold>{`${fmtTokens(tokens.total)} tokens`}</Text>
+                <Text color="#cdbb94">{`  ${fmtTokens(tokens.output)} out · ${fmtTokens(tokens.input + tokens.cacheRead + tokens.cacheWrite)} in`}</Text>
+              </Box>
+            ) : (
+              <></>
+            )}
           </>
         )}
       </Box>
