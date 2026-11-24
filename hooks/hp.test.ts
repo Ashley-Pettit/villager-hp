@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { fmtTokens, isUltra, pacePosition, paceShort, weeklyPace } from './hud'
 import { ordered, parseArtifacts } from './library'
+import { isNewer } from './update'
 
 // The band as the engine hands it to a ui.render hook.
 const BAND = {
@@ -231,7 +232,7 @@ test('desktop: the card carries an OPEN button where the badge was', async ($, o
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   await $.command.run(hp('64'))
 
-  expect(await ui.find({ type: 'Button', label: 'OPEN' })).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'open' }))?.props.label).toBe('OPEN')
   expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toMatch(/GOD MODE|ULTRA/)
 })
 
@@ -259,10 +260,50 @@ test('pane: /open lists artifacts and local docs and videos, recent first, and p
 
   const titles = async () => (await ui.findAll({})).filter(n => n.type === 'Link' || n.type === 'Button').map(n => String(n.props.label)).filter(l => !/^(All|Artifacts|Docs|Videos|Refresh|Refreshing…|★|☆)$/.test(l))
   // The scan runs in the background; give it a few turns of the loop.
-  for (let i = 0; i < 50 && (await titles()).length < 5; i++) await new Promise(r => setTimeout(r, 5))
+  for (let i = 0; i < 50 && (await titles()).length < 5; i++) await new Promise(r => (globalThis as unknown as { setTimeout: (f: (v: unknown) => void, ms: number) => void }).setTimeout(r, 5))
   expect(await titles()).toEqual(['Quarterly plan', 'Budget.docx', 'Linda avatar', 'Road Defect Sorter', 'Holiday.mp4'])
 
   await ui.press({ key: 'pin:/h/u/Movies/Holiday.mp4' })
   expect((await titles())[0]).toBe('Holiday.mp4')
   expect(await ui.find({ type: 'Text', text: 'Pinned' })).toBeDefined()
+})
+
+// ---- updates ----
+
+test('update: version compare reads numbers, not text', () => {
+  expect(isNewer('2.10.0', '2.9.0')).toBe(true)
+  expect(isNewer('2.9.0', '2.9.0')).toBe(false)
+  expect(isNewer('2.9.1', '2.10.0')).toBe(false)
+  expect(isNewer('3', '2.99.99')).toBe(true)
+})
+
+const updateEngine = (on: On, latest: string, exitCode = 0) => {
+  const ran: string[][] = []
+  memoryStore(on)
+  on('fs.read', () => ({ value: JSON.stringify({ name: 'villager-hp', version: '2.10.0' }) }) as never)
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ version: latest }) } }) as never)
+  on('session.info', () => ({ value: { transcriptPath: '/h/u/.claude/t.jsonl', configRoot: '/h/u/.claude', platform: 'macos' } }) as never)
+  on('fs.exists', () => ({ value: true }) as never)
+  on('process.run', ($, e) => {
+    ran.push([...(e as unknown as { argv: string[] }).argv])
+    return { value: { exitCode, stdout: 'done', stderr: '' } } as never
+  })
+  return ran
+}
+
+test('/hp update installs a newer version with claude plugin update', async ($, on) => {
+  const ran = updateEngine(on, '2.11.0')
+  const out = (await $.command.run({ ...hp('update') })) as { text?: string }
+  expect(out.text).toMatch(/Updated villager-hp 2\.10\.0 → 2\.11\.0\. Restart Claude/)
+  expect(ran).toEqual([
+    ['/h/u/.local/bin/claude', 'plugin', 'marketplace', 'update', 'villager-hp'],
+    ['/h/u/.local/bin/claude', 'plugin', 'update', 'villager-hp@villager-hp'],
+  ])
+})
+
+test('/hp update says so when this is already the latest, and runs nothing', async ($, on) => {
+  const ran = updateEngine(on, '2.10.0')
+  const out = (await $.command.run({ ...hp('update') })) as { text?: string }
+  expect(out.text).toBe('villager-hp 2.10.0 is the latest.')
+  expect(ran).toEqual([])
 })

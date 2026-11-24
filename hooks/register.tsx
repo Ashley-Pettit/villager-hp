@@ -5,6 +5,7 @@ import type { LibItem, LibKind, Limit, Plan, PromptTokens } from '../types'
 import { backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, openSlot, outBy, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
+import { dailyCheck, installedVersion, isAutoUpdate, isNewer, latestVersion, runUpdate } from './update'
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
 const demoAtom = atom({ plugin: 'villager-hp', key: 'demo' } as const, null as number | null)
@@ -27,7 +28,7 @@ const PLANS: readonly Plan[] = ['auto', 'ultra', 'standard']
 const FACES = { healthy: '(◕‿◕)', hurt: '(•_•)', critical: '(╥﹏╥)', dead: '(x_x)', unknown: '(•‿•)' }
 const SEGMENTS = 20
 // Named by /hp, to tell at a glance which version is loaded.
-const VERSION = '2.9: weekly pace bar, OPEN pane for artifacts, docs and videos, last prompt tokens'
+const VERSION = '2.10: /hp update, and a daily update check'
 // AoE-style: green for what's left, red for what's gone.
 const split = (hp: number) => {
   const full = Math.round((hp / 100) * SEGMENTS)
@@ -89,8 +90,8 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'hp',
-      description: "Show Claude's HP, or preview a level: /hp 10, /hp 0 to die, /hp off for real readings",
-      argumentHint: '[0-100 | off]',
+      description: "Show Claude's HP, preview a level (/hp 10, /hp 0 to die, /hp off), or /hp update, /hp autoupdate on|off",
+      argumentHint: '[0-100 | off | update | autoupdate on|off]',
     })
     await $.command.register({ name: 'die', description: 'Watch Claude die on the health card (same as /hp 0); /revive to undo' })
     await $.command.register({ name: 'revive', description: 'Bring Claude back to your real health (same as /hp off)' })
@@ -119,6 +120,9 @@ export const register: Register = on => {
     const usage = await $.session.usage()
     await update($, limitsAtom, () => usage.rateLimits)
     await update($, nowAtom, () => Date.now())
+    // Once a day, see whether a newer villager-hp is out (and install it, unless
+    // auto update is off). In the background: it never holds up the session.
+    void dailyCheck($).catch(() => undefined)
     // Tick each minute so the reset countdowns move.
     $.clock.every(60_000, () => {
       void update($, nowAtom, () => Date.now())
@@ -254,6 +258,33 @@ export const register: Register = on => {
 
   on('command.run', { command: 'hp' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
+    if (arg === 'update' || arg === 'version') {
+      const mine = await installedVersion($).catch(() => 'unknown')
+      let latest: string
+      try {
+        latest = await latestVersion($)
+      } catch (err) {
+        return { text: `villager-hp ${mine}. Couldn't reach GitHub to check for a newer one (${err instanceof Error ? err.message : String(err)}).` }
+      }
+      if (!isNewer(latest, mine)) return { text: `villager-hp ${mine} is the latest.` }
+      if (arg === 'version') return { text: `villager-hp ${mine}; ${latest} is out. Type /hp update to get it.` }
+      const result = await runUpdate($)
+      return {
+        text: result.ok
+          ? `Updated villager-hp ${mine} → ${latest}. Restart Claude to use it.`
+          : `Couldn't update to ${latest}: ${result.detail || 'no reason given'}. Pasting the install line again also updates it.`,
+      }
+    }
+    if (arg.startsWith('autoupdate')) {
+      const want = arg.split(/\s+/)[1]
+      if (want === 'on' || want === 'off') await $.store.set('autoUpdate', want === 'on').catch(() => undefined)
+      else if (want !== undefined) return { text: 'Use /hp autoupdate on or /hp autoupdate off.' }
+      return {
+        text: (await isAutoUpdate($))
+          ? 'Auto update is on: once a day villager-hp checks for a newer version and installs it. /hp autoupdate off to be told instead.'
+          : 'Auto update is off: you get a reminder when a newer version is out. /hp update installs it; /hp autoupdate on to do it by itself.',
+      }
+    }
     if (arg === 'off' || arg === 'real') {
       await update($, demoAtom, () => null)
       return { text: 'HP bars show your real limits again.' }
@@ -335,8 +366,8 @@ export const register: Register = on => {
             {`(x_x)  Claude has been defeated.  Out of ${dead.label === 'SESSION' ? 'session' : 'weekly'} hit points · ${backIn(dead.respawn)}`}
           </Text>
         ) : (
-          <>
-            {all.map((b, i) => (
+          <Box flexDirection="column">
+            {...all.map((b, i) => (
               <Box key={b.label} flexDirection="row">
                 <Text color="#d97757">{i === 0 ? `${FACES[m]} ` : '       '}</Text>
                 <Text bold color="#d4ab52">{b.label.padEnd(8)}</Text>
@@ -383,7 +414,7 @@ export const register: Register = on => {
               <Button key="open" label="Open" hotkey="o" onPress={() => openPane($)} />
               <Text dimColor>{'  artifacts, docs and videos'}</Text>
             </Box>
-          </>
+          </Box>
         )}
       </Box>
     )

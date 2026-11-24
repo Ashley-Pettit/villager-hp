@@ -42,7 +42,7 @@ In the Claude desktop app, open the Code tab. The health card sits above where y
 Good to know:
 
 - The line gets Claude Code's command-line tool if you don't have it, then adds the mod. It asks no questions and needs no admin password.
-- To get a newer version later, paste the same line again.
+- It keeps itself up to date: once a day it checks for a newer version and installs it, then tells you to restart Claude. Type `/hp update` to check now, or `/hp autoupdate off` to be told instead. Pasting the line again also updates it.
 - The full animated card shows in the desktop app's Code tab. If you run Claude Code in a terminal you get a simpler text version.
 - It needs Claude Code 2.1.287 or later. This version was tested on 2.1.295.
 - Already use Claude Code in a terminal? You can type `/plugin install villager-hp --marketplace Ashley-Pettit/villager-hp` there instead.
@@ -98,6 +98,9 @@ Under the OPEN button, **LAST PROMPT** shows the tokens your most recent prompt 
 | `/die` | Watch Claude die (same as `/hp 0`) |
 | `/revive` | Bring Claude back to your real limits |
 | `/open` | Open your artifacts, Word docs and videos (same as the OPEN button) |
+| `/hp update` | Check for a newer villager-hp and install it (restart Claude to use it) |
+| `/hp version` | Say which version you have and whether a newer one is out |
+| `/hp autoupdate off` | Tell you about new versions instead of installing them (`on` to go back) |
 | `/ultra on` | Ultra layout: hide SESSION (`/ultra off`, `/ultra auto`) |
 | `/pace` | Say whether your weekly limit lasts at this rate, and when it runs out if not |
 | `/pace over` | Preview the hourglass warning (`/pace ok` previews being on track) |
@@ -113,12 +116,15 @@ It reads your session's usage figures and keeps your pins and `/ultra` choice in
 - lists file names in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders, looking for Word docs and videos. It reads names and dates only, never what's in the files;
 - opens the file you press with your computer's own `open`, `explorer.exe` or `xdg-open`.
 
+Once a day it fetches this repository's `plugin.json` from GitHub to see whether a newer version is out, and if so runs Claude Code's own `claude plugin update villager-hp@villager-hp` (unless you turned auto update off).
+
 It writes no files of yours.
 
 Readings appear on Claude subscriptions, which report rate-limit windows; on API keys the bars show `—` until a reading arrives.
 
 ## What's new
 
+- **2.10** Updates itself: a daily check that installs a newer version, `/hp update` to check now, `/hp autoupdate off` to be told instead.
 - **2.9** A PACE bar under WEEKLY (SESSION hidden on Ultra), the OPEN pane for your artifacts, docs and videos with pins, and the last prompt's tokens.
 - **2.8** Weekly pace: an hourglass when the week is on course to run out before it resets, plus `/pace`. The villager stays cheerful for as long as the bar is green.
 - **2.5** The animated villager, rank badges and the death screen.
