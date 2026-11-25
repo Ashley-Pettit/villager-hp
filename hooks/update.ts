@@ -47,6 +47,14 @@ async function claudeBin($: EngineInterface): Promise<string> {
   return 'claude'
 }
 
+// Whether this copy came from the install line (the villager-hp catalog),
+// which `claude plugin update` can update. A copy synced from claude.ai or
+// loaded from a folder lives elsewhere and is updated where it came from.
+export const isCatalogPath = (root: string) => /[\\/]plugins[\\/]cache[\\/]villager-hp[\\/]/i.test(root)
+
+export const NOT_CATALOG =
+  "This copy of villager-hp didn't come from the install line (it's synced from claude.ai, or loaded from a folder), so it can't update itself. Update it where it came from, or paste the install line to switch to the self-updating copy."
+
 export type UpdateResult = { ok: boolean; detail: string }
 
 // Refreshes the catalog, then updates the installed plugin.
@@ -74,6 +82,10 @@ export async function dailyCheck($: EngineInterface): Promise<{ latest: string; 
   await $.store.set('updateCheckedAt', Date.now()).catch(() => undefined)
   const [mine, latest] = await Promise.all([installedVersion($), latestVersion($)])
   if (!isNewer(latest, mine)) return null
+  if (!isCatalogPath($.plugin.root)) {
+    $.ui.toast(`villager-hp ${latest} is out. This copy comes from claude.ai or a folder: update it there.`)
+    return { latest, installed: false }
+  }
   if (!(await isAutoUpdate($))) {
     $.ui.toast(`villager-hp ${latest} is out. Type /hp update to get it.`)
     return { latest, installed: false }

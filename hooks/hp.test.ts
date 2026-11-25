@@ -5,7 +5,7 @@ import { bars, fmtTokens, hudSvg, isUltra, pacePosition, paceShort, weeklyPace }
 import { asCurrency, fmtMoney } from './money'
 import { dayKey, lastDays, sumDays } from './usage'
 import { ordered, parseArtifacts } from './library'
-import { isNewer } from './update'
+import { isCatalogPath, isNewer } from './update'
 
 // The band as the engine hands it to a ui.render hook.
 const BAND = {
@@ -281,14 +281,18 @@ const updateEngine = (on: On, latest: string, exitCode = 0) => {
   return ran
 }
 
-test('/hp update installs a newer version with claude plugin update', async ($, on) => {
-  const ran = updateEngine(on, '2.11.0')
+test('update: only the copy from the install line updates itself', () => {
+  expect(isCatalogPath('/Users/ash/.claude/plugins/cache/villager-hp/villager-hp/2.11.0')).toBe(true)
+  expect(isCatalogPath('C:\\Users\\ash\\.claude\\plugins\\cache\\villager-hp\\villager-hp\\2.11.0')).toBe(true)
+  expect(isCatalogPath('/root/.claude/plugins/synced/org_x/villager-hp')).toBe(false)
+  expect(isCatalogPath('/home/ash/code/villager-hp')).toBe(false)
+})
+
+test('/hp update on a copy from claude.ai or a folder says where to update it, and runs nothing', async ($, on) => {
+  const ran = updateEngine(on, '2.99.0')
   const out = (await $.command.run({ ...hp('update') })) as { text?: string }
-  expect(out.text).toMatch(/Updated villager-hp 2\.10\.0 → 2\.11\.0\. Restart Claude/)
-  expect(ran).toEqual([
-    ['/h/u/.local/bin/claude', 'plugin', 'marketplace', 'update', 'villager-hp'],
-    ['/h/u/.local/bin/claude', 'plugin', 'update', 'villager-hp@villager-hp'],
-  ])
+  expect(out.text).toMatch(/2\.99\.0 is out .*can't update itself/)
+  expect(ran).toEqual([])
 })
 
 test('/hp update says so when this is already the latest, and runs nothing', async ($, on) => {

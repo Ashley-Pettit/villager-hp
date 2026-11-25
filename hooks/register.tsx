@@ -7,7 +7,7 @@ import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
 import { addUse, lastDays, readHistory, sumDays, usageChart } from './usage'
-import { dailyCheck, installedVersion, isAutoUpdate, isNewer, latestVersion, runUpdate } from './update'
+import { NOT_CATALOG, dailyCheck, installedVersion, isAutoUpdate, isCatalogPath, isNewer, latestVersion, runUpdate } from './update'
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
 const demoAtom = atom({ plugin: 'villager-hp', key: 'demo' } as const, null as number | null)
@@ -43,7 +43,7 @@ const PLANS: readonly Plan[] = ['auto', 'ultra', 'standard']
 const FACES = { healthy: '(◕‿◕)', hurt: '(•_•)', critical: '(╥﹏╥)', dead: '(x_x)', unknown: '(•‿•)' }
 const SEGMENTS = 20
 // Named by /hp, to tell at a glance which version is loaded.
-const VERSION = '2.11: a nicer OPEN button and library pane, with search'
+const VERSION = '2.11.1: AI usage and settings tabs, last prompt cost, updates only the install line copy'
 // AoE-style: green for what's left, red for what's gone.
 const split = (hp: number) => {
   const full = Math.round((hp / 100) * SEGMENTS)
@@ -283,6 +283,7 @@ export const register: Register = (on, options) => {
             const latest = await latestVersion($).catch(() => null)
             if (latest === null) return $.ui.toast("Couldn't reach GitHub to check.")
             if (!isNewer(latest, version)) return $.ui.toast(`villager-hp ${version} is the latest.`)
+            if (!isCatalogPath($.plugin.root)) return $.ui.toast(`villager-hp ${latest} is out. ${NOT_CATALOG}`)
             const result = await runUpdate($)
             $.ui.toast(result.ok ? `Updated to ${latest}. Restart Claude to use it.` : `Couldn't update: ${result.detail}`)
           }} />),
@@ -491,6 +492,7 @@ export const register: Register = (on, options) => {
       }
       if (!isNewer(latest, mine)) return { text: `villager-hp ${mine} is the latest.` }
       if (arg === 'version') return { text: `villager-hp ${mine}; ${latest} is out. Type /hp update to get it.` }
+      if (!isCatalogPath($.plugin.root)) return { text: `villager-hp ${latest} is out (you have ${mine}). ${NOT_CATALOG}` }
       const result = await runUpdate($)
       return {
         text: result.ok
