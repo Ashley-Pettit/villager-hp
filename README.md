@@ -65,14 +65,14 @@ On an Ultra plan the 5-hour window doesn't apply, so the card hides **SESSION** 
 
 ## Open: your artifacts, docs and videos
 
-The **OPEN** button at the right of the card (or `/open`) opens a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
+The **Open** button under the card (or `/open`) opens a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
 
 - Most recently edited at the top.
 - Press ☆ to pin something; pinned things stay at the top, across sessions. Press ★ to unpin.
 - Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
 - An artifact opens in your browser; a doc or video opens in its own app.
 
-Under the OPEN button, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, then the new tokens it used (`LAST PROMPT ~A$0.13 · 172 NEW`). Hover over it for the full breakdown: tokens in, out and newly cached, and how much of the chat Claude re-read from cache. New tokens leave out those cache reads, which grow with the length of the chat rather than the work. The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the same breakdown.
+Under the card, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, then the new tokens it used (`LAST PROMPT ~A$0.13 · 172 new tokens`). Hover over it for the full breakdown: tokens in, out and newly cached, and how much of the chat Claude re-read from cache. New tokens leave out those cache reads, which grow with the length of the chat rather than the work. The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the same breakdown.
 
 ## AI usage and settings
 
@@ -89,7 +89,7 @@ The pane the OPEN button opens has three tabs:
 - **An animated villager.** He blinks and breathes in every state. He grins and chops away with his pickaxe for as long as the bar is green; as HP falls his swing slows, his head droops, a bandage appears, then tears; near zero he sobs and trembles.
 - **Bars that feel alive.** They sweep in, energy stripes flow through them, a shine passes along, and sparks drift off the leading edge. The heart beats faster as HP drops.
 - **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+; a full one shows **MAX**) and red-alert chevrons on a low one.
-- **OPEN button.** Your artifacts, Word docs and videos, newest first, with pins.
+- **Open button.** Your artifacts, Word docs and videos, newest first, with pins.
 - **Death.** At 0 HP the villager goes grey, gets X eyes and a halo, and the card reads *Claude has been defeated* with the time you'll be back.
 
 ![Low HP: a crying villager, red bars, red-alert chevrons and an Innovator badge](assets/screenshot-low.png)

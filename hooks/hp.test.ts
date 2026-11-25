@@ -1,7 +1,7 @@
 import type { On, RenderElement } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
-import { bars, fmtTokens, hudSvg, isUltra, pacePosition, paceShort, weeklyPace } from './hud'
+import { fmtTokens, isUltra, pacePosition, paceShort, promptSummary, weeklyPace } from './hud'
 import { asCurrency, fmtMoney } from './money'
 import { dayKey, lastDays, sumDays } from './usage'
 import { ordered, parseArtifacts } from './library'
@@ -213,13 +213,15 @@ test('library: pinned first, then the most recently edited', () => {
   expect(ordered(items, [], 'doc').rest.map(i => i.title)).toEqual(['Quarterly plan'])
 })
 
-test('desktop: the card carries an OPEN button where the badge was', async ($, on) => {
+test('desktop: OPEN sits in a row under the card, not over it', async ($, on) => {
   statusRow(on)
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   await $.command.run(hp('64'))
 
-  expect((await ui.find({ type: 'Button', key: 'open' }))?.props.label).toBe('OPEN')
-  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toMatch(/GOD MODE|ULTRA/)
+  expect((await ui.find({ type: 'Button', key: 'open' }))?.props.label).toBe('Open')
+  // A plain image, with nothing laid over it: the row under it holds OPEN.
+  expect((await ui.find({ type: 'Svg' }))?.props.isInteractive).toBeUndefined()
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toMatch(/GOD MODE|ULTRA|LAST PROMPT/)
 })
 
 test('pane: /open lists artifacts and local docs and videos, recent first, and pins one to the top', async ($, on) => {
@@ -244,7 +246,7 @@ test('pane: /open lists artifacts and local docs and videos, recent first, and p
   })
   await $.command.run({ ...hp(''), command: 'open' })
 
-  const titles = async () => (await ui.findAll({})).filter(n => n.type === 'Link' || n.type === 'Button').map(n => String(n.props.label)).filter(l => !/^(All|Artifacts|Docs|Videos|Refresh|Pin|Unpin|OPEN)$|^[⊞▤⚙] /.test(l))
+  const titles = async () => (await ui.findAll({})).filter(n => n.type === 'Link' || n.type === 'Button').map(n => String(n.props.label)).filter(l => !/^(All|Artifacts|Docs|Videos|Refresh|Pin|Unpin|Open)$|^[⊞▤⚙] /.test(l))
   // The scan runs in the background; give it a few turns of the loop.
   for (let i = 0; i < 50 && (await titles()).length < 5; i++) await new Promise(r => (globalThis as unknown as { setTimeout: (f: (v: unknown) => void, ms: number) => void }).setTimeout(r, 5))
   expect(await titles()).toEqual(['Quarterly plan', 'Budget.docx', 'Linda avatar', 'Road Defect Sorter', 'Holiday.mp4'])
@@ -313,13 +315,17 @@ test('money: rough cost in the chosen currency', () => {
   expect(asCurrency('XYZ')).toBe('AUD')
 })
 
-test('card: LAST PROMPT shows the rough cost, then the new tokens', () => {
-  const svg = hudSvg(bars(week(20, 5), null, NOW), { tokens: { total: 48210, input: 1, output: 1, cacheRead: 48207, cacheWrite: 1, usd: 0.27 }, cost: 'A$0.41' })
-  // Cost first, then only the new tokens: 1 in + 1 out + 1 newly cached, not the cache read.
-  expect(svg).toMatch(/LAST PROMPT <tspan[^>]*>~A\$0\.41<\/tspan> · <tspan[^>]*>3<\/tspan> NEW/)
-  // Hovering it shows the full breakdown, with a plain tooltip as a fallback.
-  expect(svg).toMatch(/<title>Last prompt: about A\$0\.41 at API rates\. 3 new tokens: 1 in, 1 out, 1 newly cached\. Plus 48k re-read from cache\.<\/title>/)
-  expect(svg).toMatch(/\.tok:hover\+\.tip\{opacity:1\}/)
+test('last prompt: cost first, then new tokens; the breakdown keeps every part', () => {
+  const sum = promptSummary({ total: 48210, input: 1, output: 1, cacheRead: 48207, cacheWrite: 1, usd: 0.27 }, 'A$0.41')
+  expect(sum.cost).toBe('~A$0.41')
+  expect(sum.fresh).toBe('3')
+  expect(sum.detail).toEqual([
+    ['Rough cost (API rates)', '~A$0.41'],
+    ['In', '1'],
+    ['Out', '1'],
+    ['Newly cached', '1'],
+    ['Re-read from cache', '48k'],
+  ])
 })
 
 // ---- AI usage history and settings ----
@@ -365,4 +371,18 @@ test('/pace over gives a percent, never a date', async ($, on) => {
   expect(out.text).toMatch(/over pace/)
   expect(said.text).toMatch(/about \d+% of the limit by the reset/)
   expect(said.text).not.toMatch(/out (by|in)|Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+})
+
+test('desktop: after a prompt, the row under the card holds the last prompt and its breakdown', async ($, on) => {
+  statusRow(on)
+  on('prompt.submit', (_, e) => e as never)
+  const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  await $.prompt.submit({ text: 'hello' } as never)
+
+  // The line and its breakdown row are both drawn; the row shows on hover (hover props
+  // aren't visible to the test kit, so this checks what each holds).
+  expect(await ui.find({ type: 'Box', key: 'tokens' })).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'tokens-detail' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /new tokens ⓘ/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Re-read from cache' })).toBeDefined()
 })

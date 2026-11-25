@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } from '../types'
-import { backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, openSlot, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
+import { backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
@@ -21,6 +21,8 @@ type Tab = LibKind | 'all'
 const tabAtom = atom({ plugin: 'villager-hp', key: 'libraryTab' } as const, 'all' as Tab)
 const queryAtom = atom({ plugin: 'villager-hp', key: 'libraryQuery' } as const, '')
 const PANE = 'villager-open'
+// Hovering the last prompt line lights this group, which reveals its breakdown.
+const TOKENS_SCOPE = 'villager-hp-tokens'
 const TABS: readonly [Tab, string][] = [['all', 'All'], ['artifact', 'Artifacts'], ['doc', 'Docs'], ['video', 'Videos']]
 // Each kind's chip: its glyph, colour, a dark tint behind it, and its name.
 const KIND_LOOK: Record<LibKind, { icon: string; color: string; tint: string; name: string }> = {
@@ -555,35 +557,44 @@ export const register: Register = (on, options) => {
     // carry an element its surface draws as nothing.
     if (e.surface !== 'terminal' && 'Svg' in elements) {
       const { Box, Svg, Button, Text } = elements
-      const slot = openSlot(all.length + (pace !== undefined ? 1 : 0))
       const alt =
         all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
-        (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`) +
-        (tokens !== null ? `, last prompt ${cost ? `about ${cost} at API rates, ` : ''}${fmtTokens(newTokens(tokens))} new tokens` : '')
-      // The card, with the real OPEN button laid over the slot it leaves at the right.
+        (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`)
+      const sum = tokens === null ? null : promptSummary(tokens, cost)
+      // The card as a plain image at full width, then a row of its own under it:
+      // the last prompt at the left (hover it for the breakdown), OPEN at the right.
+      // Nothing is laid over the image, so its size never matters.
       return (
         <Box flexDirection="column">
           {below}
-          <Box position="relative">
-            <Svg
-              key={`hp-${m}-${paceZone(pace)}-${ultra}`}
-              source={hudSvg(all, { pace, hideSession: ultra, tokens, cost })}
-              isInteractive
-              alt={`Claude's health: ${alt}`}
-            />
-            <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" justifyContent="flex-end">
-              <Box flexDirection="column" width={slot.width}>
-                <Box height={slot.pad} />
-                <Box height={slot.height} justifyContent="center" alignItems="center">
-                  <Button key="open" label="OPEN" variant="primary" onPress={() => openPane($)}>
-                    <Text color="#5ec4ff">⊞</Text>
-                    <Text weight="semibold">{' Open'}</Text>
-                  </Button>
-                </Box>
+          <Svg key={`hp-${m}-${paceZone(pace)}-${ultra}`} source={hudSvg(all, { pace, hideSession: ultra })} alt={`Claude's health: ${alt}`} />
+          <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} paddingX={1}>
+            {sum === null ? (
+              <Text size="caption" dimColor>LAST PROMPT —</Text>
+            ) : (
+              <Box key="tokens" flexDirection="row" gap={1} hover={{ scope: TOKENS_SCOPE }}>
+                <Text size="caption" weight="bold" dimColor>LAST PROMPT</Text>
+                {sum.cost ? <Text size="caption" weight="bold" color="#16a34a">{sum.cost}</Text> : <></>}
+                <Text size="caption" dimColor>{`· ${sum.fresh} new tokens ⓘ`}</Text>
               </Box>
-              <Box width={slot.margin} />
-            </Box>
+            )}
+            <Button key="open" label="Open" variant="primary" onPress={() => openPane($)}>
+              <Text>⊞</Text>
+              <Text weight="semibold">{' Open'}</Text>
+            </Button>
           </Box>
+          {sum === null ? (
+            <></>
+          ) : (
+            <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" gap={2} paddingX={1}>
+              {...sum.detail.map(([label, value]) => (
+                <Box key={`detail:${label}`} flexDirection="row" gap={1}>
+                  <Text size="caption" dimColor>{label}</Text>
+                  <Text size="caption" weight="semibold">{value}</Text>
+                </Box>
+              ))}
+            </Box>
+          )}
         </Box>
       )
     }

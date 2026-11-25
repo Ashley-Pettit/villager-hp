@@ -140,14 +140,10 @@ const AV = { cx: 34, cy: 32, r: 25 } // the avatar circle
 const ICON_X = 74
 const LABEL_X = 92
 const BAR_X = 172
-// The right of the card is kept for the OPEN button: a fixed slot, so the
-// reset times always sit the same distance from it.
-const BADGE_ZONE = 115.2 // the OPEN button's slot
-const BADGE_GAP = 24 // between the reset times and the OPEN slot
-// The bars fill what the OPEN slot leaves.
-let BAR_W = 960 - 16 - BADGE_ZONE - BADGE_GAP - 78 - 66 - 16 - 172
+// The bars fill the card, less the values and reset chips at its right.
+const BAR_W = 960 - 16 - 78 - 66 - 16 - 172
 const BAR_H = 12
-let VALUE_X = BAR_X + BAR_W + 16
+const VALUE_X = BAR_X + BAR_W + 16
 const ROW_CY = [20, 44, 68] // the rows' centre lines, top down
 const UI = `font-family="'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif"`
 
@@ -515,70 +511,19 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
   return icon + label + track + ends + reach + centre + marker + value + chip
 }
 
-// The right of the card is kept for the OPEN button. The surface draws the
-// real button over this slot (register.tsx places it by openSlot's percents);
-// the card itself draws only the last prompt's tokens under it.
-const OPEN_W = 144 // 15% of the card, so the overlay lands on it exactly
-const OPEN_RIGHT = 28.8 // 3%: clear of the card's corner brackets
-const OPEN_X = 960 - OPEN_RIGHT - OPEN_W
-const TOKENS_ROOM = 16 // card units under the button for the tokens line
-
-// Where the OPEN button sits over the drawn card, in percent of the image:
-// a spacer as wide as the card's right margin, the slot's width, and the
-// slot's height under the card's top padding (above the tokens line).
-export const openSlot = (rows: number) => {
-  const h = rows > 2 ? 88 : 64
-  const total = h + HUD_PAD_TOP
-  const pct = (n: number) => `${Math.round((n * 100) / 960)}%`
-  const vpct = (n: number) => `${Math.round((n * 100) / total)}%`
-  return { margin: pct(OPEN_RIGHT), width: pct(OPEN_W), pad: vpct(HUD_PAD_TOP), height: vpct(h - TOKENS_ROOM) }
-}
-
-// A glowing socket the OPEN button sits in: a dark inset whose cyan edge
-// breathes, filling the slot the button is laid over.
-const openSocket = () => {
-  const y = 7
-  const h = HUD_H - TOKENS_ROOM - 9
-  return `<g>
-    <rect x="${OPEN_X}" y="${y}" width="${OPEN_W}" height="${h}" rx="12" fill="#0d1117" fill-opacity="0.85" stroke="${HUD_CYAN}" stroke-opacity="0.3" stroke-width="1"/>
-    <rect x="${OPEN_X}" y="${y}" width="${OPEN_W}" height="${h}" rx="12" fill="none" stroke="${HUD_CYAN}" stroke-width="2" filter="url(#soft)" opacity="0.2">
-      <animate attributeName="opacity" values="0.1;0.4;0.1" dur="3.2s" repeatCount="indefinite"/>
-    </rect>
-  </g>`
-}
-
-// Under the socket: the last prompt's rough cost at API rates first, then the
-// tokens it added ("LAST PROMPT ~A$0.13 · 172 NEW"), its right edge on the
-// socket's. Hovering it shows the full breakdown in a panel to its left (an
-// interactive Svg draws CSS :hover), with a <title> tooltip as well.
-const tokenReadout = (tokens: PromptTokens | null, cost: string | null) => {
-  if (tokens === null) return ''
-  const right = OPEN_X + OPEN_W
-  const y = HUD_H - 6
-  const fresh = fmtTokens(newTokens(tokens))
-  const breakdown = `Last prompt${cost ? `: about ${cost} at API rates` : ''}. ${fresh} new tokens: ${fmtTokens(tokens.input)} in, ${fmtTokens(tokens.output)} out, ${fmtTokens(tokens.cacheWrite)} newly cached. Plus ${fmtTokens(tokens.cacheRead)} re-read from cache.`
-  const readout = `<g class="tok" style="cursor:help">
-    <title>${breakdown}</title>
-    <rect x="${right - 170}" y="${y - 11}" width="170" height="15" fill="#000" fill-opacity="0"/>
-    <text x="${right}" y="${y}" text-anchor="end" ${UI} font-size="9" font-weight="600" letter-spacing="0.2" fill="${T.muted}">LAST PROMPT ${cost ? `<tspan fill="#86efac" font-weight="700">~${cost}</tspan> · ` : ''}<tspan fill="${T.text}" font-weight="700">${fresh}</tspan> NEW</text>
-  </g>`
-  // The panel: to the left of the socket, over the values, so the OPEN button stays clear.
-  const w = 206
-  const h = 52
-  const x = OPEN_X - w - 8
-  const top = Math.max(4, (HUD_H - h) / 2)
-  const line = (dy: number, label: string, value: string, colour: string = T.text) =>
-    `<text x="${x + 12}" y="${top + dy}" ${UI} font-size="9.5" fill="${T.muted}">${label}</text><text x="${x + w - 12}" y="${top + dy}" text-anchor="end" ${UI} font-size="9.5" font-weight="700" fill="${colour}">${value}</text>`
-  const tip = `<g class="tip" pointer-events="none">
-    <rect x="${x}" y="${top}" width="${w}" height="${h}" rx="8" fill="#0d1117" stroke="${HUD_CYAN}" stroke-opacity="0.5"/>
-    ${line(13, 'Rough cost (API rates)', cost ? `~${cost}` : '—', '#86efac')}
-    ${line(25, 'New: in · out · cached', `${fmtTokens(tokens.input)} · ${fmtTokens(tokens.output)} · ${fmtTokens(tokens.cacheWrite)}`)}
-    ${line(37, 'New tokens in all', fresh)}
-    ${line(48, 'Re-read from cache', fmtTokens(tokens.cacheRead), T.muted)}
-  </g>
-  <style>.tip{opacity:0;transition:opacity .15s ease}.tok:hover+.tip{opacity:1}@media (prefers-reduced-motion:reduce){.tip{transition:none}}</style>`
-  return readout + tip
-}
+// The last prompt in words, for the row under the card: the rough cost, the
+// new tokens, and the breakdown its hover reveals.
+export const promptSummary = (t: PromptTokens, cost: string | null) => ({
+  cost: cost ? `~${cost}` : null,
+  fresh: fmtTokens(newTokens(t)),
+  detail: [
+    ['Rough cost (API rates)', cost ? `~${cost}` : '—'],
+    ['In', fmtTokens(t.input)],
+    ['Out', fmtTokens(t.output)],
+    ['Newly cached', fmtTokens(t.cacheWrite)],
+    ['Re-read from cache', fmtTokens(t.cacheRead)],
+  ] as [string, string][],
+})
 
 const gradient = (id: string, hp: number | null) => {
   const [a, b] = T[tone(hp ?? 100)]
@@ -601,11 +546,9 @@ const aurora = (colour: string) => `
 // What the card adds beyond the bars: the weekly pace bar under WEEKLY
 // (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
 // the last prompt's tokens.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean; tokens?: PromptTokens | null; cost?: string | null }
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean }
 
 export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
-  BAR_W = 960 - OPEN_RIGHT - OPEN_W - BADGE_GAP - 78 - 66 - 16 - BAR_X
-  VALUE_X = BAR_X + BAR_W + 16
   const m = mood(all)
   const dead = killer(all)
   const known = all.flatMap(b => (b.hp === null ? [] : [b.hp]))
@@ -663,8 +606,6 @@ export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   ${hologram()}
   ${mid(radar(m) + avatar(m, low))}
   ${rows}
-  ${openSocket()}
-  ${tokenReadout(extra.tokens ?? null, extra.cost ?? null)}
   ${cornerBrackets()}
   ${deathScreen}
   </g>
