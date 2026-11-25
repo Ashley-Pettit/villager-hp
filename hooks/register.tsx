@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } from '../types'
-import { backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, openSlot, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
+import { backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, openSlot, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
@@ -61,7 +61,7 @@ const paceLine = (pace: Pace | null) =>
 const tokensLine = (t: PromptTokens | null, cost: string | null) =>
   t === null
     ? 'Last prompt: no tokens counted yet.'
-    : `Last prompt: ${t.total.toLocaleString()} tokens (${fmtTokens(t.input)} in, ${fmtTokens(t.output)} out, ${fmtTokens(t.cacheRead)} cache read, ${fmtTokens(t.cacheWrite)} cache write)${cost ? `, about ${cost} at API rates` : ''}.`
+    : `Last prompt: ${cost ? `about ${cost} at API rates, ` : ''}${newTokens(t).toLocaleString()} new tokens (${fmtTokens(t.input)} in, ${fmtTokens(t.output)} out, ${fmtTokens(t.cacheWrite)} newly cached), plus ${fmtTokens(t.cacheRead)} re-read from cache.`
 
 // The pace bar in text, for the terminal: cap ├────┼──●───┤ spare
 const PACE_CELLS = 21
@@ -211,7 +211,7 @@ export const register: Register = (on, options) => {
       const tile = (key: string, label: string, use: DayUse) => (
         <Box key={key} flexDirection="column" flexGrow={1} paddingX={1} borderStyle={isTerminalPane ? undefined : 'round'} borderColor="#2b333d" backgroundColor={isTerminalPane ? undefined : '#151a21'}>
           <Text size="caption" weight="bold" color="#8f9aa7">{label.toUpperCase()}</Text>
-          <Text size="heading" weight="bold">{`${fmtTokens(use.tokens)} tokens`}</Text>
+          <Text size="heading" weight="bold">{`${fmtTokens(use.tokens)} new tokens`}</Text>
           <Text size="caption" dimColor>{`~${fmtMoney(use.usd, currency, rate)} · ${use.prompts} prompt${use.prompts === 1 ? '' : 's'}`}</Text>
         </Box>
       )
@@ -237,18 +237,18 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         ) : (
-          <Svg key="chart" source={usageChart(days, fmtTokens)} alt={`Tokens per day for the last 14 days; today ${fmtTokens(days[days.length - 1]?.tokens ?? 0)}`} />
+          <Svg key="chart" source={usageChart(days, fmtTokens)} alt={`New tokens per day for the last 14 days; today ${fmtTokens(days[days.length - 1]?.tokens ?? 0)}`} />
         ),
         <Box key="days" flexDirection="column">
           <Text size="caption" weight="bold" color="#8f9aa7">BY DAY</Text>
           {...[...days].reverse().filter(d => d.tokens > 0 || d.prompts > 0).map(d => (
             <Box key={`day:${d.day}`} flexDirection="row" justifyContent="space-between">
               <Text>{dayName(d.day)}</Text>
-              <Text tabular>{`${fmtTokens(d.tokens)} tokens · ~${fmtMoney(d.usd, currency, rate)} · ${d.prompts} prompts`}</Text>
+              <Text tabular>{`~${fmtMoney(d.usd, currency, rate)} · ${fmtTokens(d.tokens)} new tokens · ${d.prompts} prompts`}</Text>
             </Box>
           ))}
         </Box>,
-        <Text key="note" size="caption" dimColor>{`Rough: counted by villager-hp in every session since it was installed, cost at API rates in ${currency}. Kept for 90 days.`}</Text>,
+        <Text key="note" size="caption" dimColor>{`Rough, at API rates in ${currency}. New tokens leave out the chat Claude re-reads from cache each turn. Counted in every session since villager-hp 2.11; kept 90 days.`}</Text>,
       )
     }
 
@@ -447,7 +447,8 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const u = e.usage
     if (u !== undefined) {
-      await recordUse($, { tokens: u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens }).catch(() => undefined)
+      // New tokens only: cache reads re-read the chat each turn and would swamp the day.
+      await recordUse($, { tokens: u.input_tokens + u.output_tokens + u.cache_creation_input_tokens }).catch(() => undefined)
       await update($, lastPromptAtom, prev => {
         const t = prev ?? emptyTokens()
         const input = t.input + u.input_tokens
@@ -558,7 +559,7 @@ export const register: Register = (on, options) => {
       const alt =
         all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
         (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`) +
-        (tokens !== null ? `, last prompt ${fmtTokens(tokens.total)} tokens${cost ? `, about ${cost} at API rates` : ''}` : '')
+        (tokens !== null ? `, last prompt ${cost ? `about ${cost} at API rates, ` : ''}${fmtTokens(newTokens(tokens))} new tokens` : '')
       // The card, with the real OPEN button laid over the slot it leaves at the right.
       return (
         <Box flexDirection="column">
@@ -567,6 +568,7 @@ export const register: Register = (on, options) => {
             <Svg
               key={`hp-${m}-${paceZone(pace)}-${ultra}`}
               source={hudSvg(all, { pace, hideSession: ultra, tokens, cost })}
+              isInteractive
               alt={`Claude's health: ${alt}`}
             />
             <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" justifyContent="flex-end">
@@ -632,9 +634,9 @@ export const register: Register = (on, options) => {
               <Box flexDirection="row">
                 <Text>{'       '}</Text>
                 <Text bold color="#d4ab52">{'PROMPT'.padEnd(8)}</Text>
-                <Text color="#f1e3c0" bold>{`${fmtTokens(tokens.total)} tokens`}</Text>
-                <Text color="#cdbb94">{`  ${fmtTokens(tokens.output)} out · ${fmtTokens(tokens.input + tokens.cacheRead + tokens.cacheWrite)} in`}</Text>
-                <Text color="#86efac">{cost ? `  ~${cost} at API rates` : ''}</Text>
+                <Text color="#86efac" bold>{cost ? `~${cost}  ` : ''}</Text>
+                <Text color="#f1e3c0" bold>{`${fmtTokens(newTokens(tokens))} new tokens`}</Text>
+                <Text color="#cdbb94">{`  (${fmtTokens(tokens.cacheRead)} re-read from cache)`}</Text>
               </Box>
             ) : (
               <></>

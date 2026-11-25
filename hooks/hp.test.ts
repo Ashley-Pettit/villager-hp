@@ -313,9 +313,13 @@ test('money: rough cost in the chosen currency', () => {
   expect(asCurrency('XYZ')).toBe('AUD')
 })
 
-test('card: LAST PROMPT carries the rough cost beside the tokens', () => {
-  const svg = hudSvg(bars(week(20, 5), null, NOW), { tokens: { total: 48210, input: 1, output: 1, cacheRead: 1, cacheWrite: 1, usd: 0.27 }, cost: 'A$0.41' })
-  expect(svg).toMatch(/LAST PROMPT <tspan[^>]*>48k<\/tspan> · <tspan[^>]*>~A\$0\.41<\/tspan>/)
+test('card: LAST PROMPT shows the rough cost, then the new tokens', () => {
+  const svg = hudSvg(bars(week(20, 5), null, NOW), { tokens: { total: 48210, input: 1, output: 1, cacheRead: 48207, cacheWrite: 1, usd: 0.27 }, cost: 'A$0.41' })
+  // Cost first, then only the new tokens: 1 in + 1 out + 1 newly cached, not the cache read.
+  expect(svg).toMatch(/LAST PROMPT <tspan[^>]*>~A\$0\.41<\/tspan> · <tspan[^>]*>3<\/tspan> NEW/)
+  // Hovering it shows the full breakdown, with a plain tooltip as a fallback.
+  expect(svg).toMatch(/<title>Last prompt: about A\$0\.41 at API rates\. 3 new tokens: 1 in, 1 out, 1 newly cached\. Plus 48k re-read from cache\.<\/title>/)
+  expect(svg).toMatch(/\.tok:hover\+\.tip\{opacity:1\}/)
 })
 
 // ---- AI usage history and settings ----
@@ -339,7 +343,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     expect(await ui.find({ type: 'Text', text: 'TODAY' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'LAST 30 DAYS' })).toBeDefined()
-    if (surface === 'desktop') expect(String((await ui.find({ type: 'Svg' }))?.props.alt)).toMatch(/Tokens per day/)
+    if (surface === 'desktop') expect(String((await ui.find({ type: 'Svg' }))?.props.alt)).toMatch(/New tokens per day/)
   })
 }
 

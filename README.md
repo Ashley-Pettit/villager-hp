@@ -72,14 +72,14 @@ The **OPEN** button at the right of the card (or `/open`) opens a pane listing y
 - Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
 - An artifact opens in your browser; a doc or video opens in its own app.
 
-Under the OPEN button, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included, and its rough cost at API rates (`~A$0.42`). The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the breakdown.
+Under the OPEN button, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, then the new tokens it used (`LAST PROMPT ~A$0.13 · 172 NEW`). Hover over it for the full breakdown: tokens in, out and newly cached, and how much of the chat Claude re-read from cache. New tokens leave out those cache reads, which grow with the length of the chat rather than the work. The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the same breakdown.
 
 ## AI usage and settings
 
 The pane the OPEN button opens has three tabs:
 
 - **Library:** your artifacts, docs and videos (above).
-- **AI usage:** tokens, rough cost and prompts today, over 7 days and over 30 days, a 14-day chart, and a day-by-day list. It counts every session from when 2.11 was installed and keeps 90 days. `/hp usage` opens it.
+- **AI usage:** rough cost, new tokens and prompts today, over 7 days and over 30 days, a 14-day chart, and a day-by-day list. It counts every session from when 2.11 was installed and keeps 90 days. `/hp usage` opens it.
 - **Settings:** the currency for costs (AUD by default; also a row in `/config`), the Ultra layout, auto update, and a Check for updates button. `/hp settings` opens it.
 
 ## What it does
@@ -134,7 +134,7 @@ Readings appear on Claude subscriptions, which report rate-limit windows; on API
 
 ## What's new
 
-- **2.11** The last prompt's rough cost at API rates, in your currency. AI usage history and Settings tabs. A nicer OPEN button and library (search, counts, cards grouped by Today, This week and Earlier). No more hourglass, cap date or over-pace chip: the PACE bar's marker and percent show it.
+- **2.11** The last prompt's rough cost at API rates and new tokens, with the full breakdown on hover, in your currency. AI usage history and Settings tabs. A nicer OPEN button and library (search, counts, cards grouped by Today, This week and Earlier). No more hourglass, cap date or over-pace chip: the PACE bar's marker and percent show it.
 - **2.10** Updates itself: a daily check that installs a newer version, `/hp update` to check now, `/hp autoupdate off` to be told instead.
 - **2.9** A PACE bar under WEEKLY (SESSION hidden on Ultra), the OPEN pane for your artifacts, docs and videos with pins, and the last prompt's tokens.
 - **2.8** Weekly pace: an hourglass when the week is on course to run out before it resets, plus `/pace`. The villager stays cheerful for as long as the bar is green.

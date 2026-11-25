@@ -121,6 +121,11 @@ export const paceShort = (pace: Pace | null) => {
 export const fmtTokens = (n: number) =>
   n < 1000 ? `${n}` : n < 1_000_000 ? `${(n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, '')}k` : `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`
 
+// The tokens a prompt really added: what you sent, what Claude wrote and what
+// was newly cached. Leaves out cache reads, the conversation re-read on every
+// turn at a tenth of the price, which grow with the chat, not the work.
+export const newTokens = (t: PromptTokens) => t.input + t.output + t.cacheWrite
+
 export const emptyTokens = (): PromptTokens => ({ total: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
 
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
@@ -542,12 +547,38 @@ const openSocket = () => {
   </g>`
 }
 
-// Under the socket: the last prompt's tokens and, where known, its rough cost
-// at API rates ("LAST PROMPT 48k · ~A$0.42"), its right edge on the socket's.
-const tokenReadout = (tokens: PromptTokens | null, cost: string | null) =>
-  tokens === null
-    ? ''
-    : `<text x="${OPEN_X + OPEN_W}" y="${HUD_H - 6}" text-anchor="end" ${UI} font-size="9.5" font-weight="600" letter-spacing="0.4" fill="${T.muted}">LAST PROMPT <tspan fill="${T.text}" font-weight="700">${fmtTokens(tokens.total)}</tspan>${cost ? ` · <tspan fill="#86efac" font-weight="700">~${cost}</tspan>` : ''}</text>`
+// Under the socket: the last prompt's rough cost at API rates first, then the
+// tokens it added ("LAST PROMPT ~A$0.13 · 172 NEW"), its right edge on the
+// socket's. Hovering it shows the full breakdown in a panel to its left (an
+// interactive Svg draws CSS :hover), with a <title> tooltip as well.
+const tokenReadout = (tokens: PromptTokens | null, cost: string | null) => {
+  if (tokens === null) return ''
+  const right = OPEN_X + OPEN_W
+  const y = HUD_H - 6
+  const fresh = fmtTokens(newTokens(tokens))
+  const breakdown = `Last prompt${cost ? `: about ${cost} at API rates` : ''}. ${fresh} new tokens: ${fmtTokens(tokens.input)} in, ${fmtTokens(tokens.output)} out, ${fmtTokens(tokens.cacheWrite)} newly cached. Plus ${fmtTokens(tokens.cacheRead)} re-read from cache.`
+  const readout = `<g class="tok" style="cursor:help">
+    <title>${breakdown}</title>
+    <rect x="${right - 170}" y="${y - 11}" width="170" height="15" fill="#000" fill-opacity="0"/>
+    <text x="${right}" y="${y}" text-anchor="end" ${UI} font-size="9" font-weight="600" letter-spacing="0.2" fill="${T.muted}">LAST PROMPT ${cost ? `<tspan fill="#86efac" font-weight="700">~${cost}</tspan> · ` : ''}<tspan fill="${T.text}" font-weight="700">${fresh}</tspan> NEW</text>
+  </g>`
+  // The panel: to the left of the socket, over the values, so the OPEN button stays clear.
+  const w = 206
+  const h = 52
+  const x = OPEN_X - w - 8
+  const top = Math.max(4, (HUD_H - h) / 2)
+  const line = (dy: number, label: string, value: string, colour: string = T.text) =>
+    `<text x="${x + 12}" y="${top + dy}" ${UI} font-size="9.5" fill="${T.muted}">${label}</text><text x="${x + w - 12}" y="${top + dy}" text-anchor="end" ${UI} font-size="9.5" font-weight="700" fill="${colour}">${value}</text>`
+  const tip = `<g class="tip" pointer-events="none">
+    <rect x="${x}" y="${top}" width="${w}" height="${h}" rx="8" fill="#0d1117" stroke="${HUD_CYAN}" stroke-opacity="0.5"/>
+    ${line(13, 'Rough cost (API rates)', cost ? `~${cost}` : '—', '#86efac')}
+    ${line(25, 'New: in · out · cached', `${fmtTokens(tokens.input)} · ${fmtTokens(tokens.output)} · ${fmtTokens(tokens.cacheWrite)}`)}
+    ${line(37, 'New tokens in all', fresh)}
+    ${line(48, 'Re-read from cache', fmtTokens(tokens.cacheRead), T.muted)}
+  </g>
+  <style>.tip{opacity:0;transition:opacity .15s ease}.tok:hover+.tip{opacity:1}@media (prefers-reduced-motion:reduce){.tip{transition:none}}</style>`
+  return readout + tip
+}
 
 const gradient = (id: string, hp: number | null) => {
   const [a, b] = T[tone(hp ?? 100)]
