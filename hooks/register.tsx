@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } from '../types'
-import { backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, openSlot, outBy, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
+import { backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, openSlot, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
@@ -55,7 +55,7 @@ const paceLine = (pace: Pace | null) =>
   pace === null
     ? 'Weekly pace: not enough of the week to go on yet.'
     : pace.isOver
-      ? `Weekly pace: over. At this rate you're ${outBy(pace.runsOut)}, before the week resets (about ${pace.projected}% of the limit by then).`
+      ? `Weekly pace: over. At this rate you'd use about ${pace.projected}% of the limit by the reset.`
       : `Weekly pace: on track. At this rate about ${pace.projected}% of the limit is used by the reset.`
 
 const tokensLine = (t: PromptTokens | null, cost: string | null) =>
@@ -124,7 +124,7 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'open', description: 'Open your artifacts, Word docs and videos, recent first; pin favourites to the top' })
     await $.command.register({
       name: 'pace',
-      description: 'Whether your weekly limit lasts at this rate, or preview the warning: /pace over, /pace ok, /pace off for the real one',
+      description: "Whether your weekly limit lasts at this rate (as a percent of the limit by the reset), or preview: /pace over, /pace ok, /pace off",
       argumentHint: '[over | ok | off]',
     })
     await $.command.register({

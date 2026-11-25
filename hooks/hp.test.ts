@@ -353,3 +353,12 @@ test('settings: the currency picker shows the chosen currency', { options: { cur
   expect((await ui.find({ type: 'Select', key: 'currency' }))?.props.value).toBe('EUR')
   expect(await ui.find({ type: 'Text', text: 'Version 2.11.0' })).toBeDefined()
 })
+
+test('/pace over gives a percent, never a date', async ($, on) => {
+  await $.command.run(hp('64'))
+  const out = (await $.command.run(pace('over'))) as { text?: string }
+  const said = (await $.command.run(pace(''))) as { text?: string }
+  expect(out.text).toMatch(/over pace/)
+  expect(said.text).toMatch(/about \d+% of the limit by the reset/)
+  expect(said.text).not.toMatch(/out (by|in)|Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
+})

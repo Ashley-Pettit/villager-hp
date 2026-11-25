@@ -2,7 +2,7 @@
 
 Your Claude usage limits as a game health card, drawn above the prompt in Claude Code.
 
-villager-hp is a Claude Code mod (a plugin). It turns your 5-hour session limit and your weekly limit into two health bars, tells you when the week is on pace to run out early, and puts an animated villager beside them who feels every point you spend.
+villager-hp is a Claude Code mod (a plugin). It turns your 5-hour session limit and your weekly limit into two health bars, shows whether the week is on pace to run out early, and puts an animated villager beside them who feels every point you spend.
 
 [![What the scanner says this mod can reach](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/Ashley-Pettit--villager-hp--villager-hp-reach.svg)](https://mods.aidojo.si/#Ashley-Pettit--villager-hp--villager-hp)
 [![Validation result](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/Ashley-Pettit--villager-hp--villager-hp-validates.svg)](https://mods.aidojo.si/#Ashley-Pettit--villager-hp--villager-hp)
@@ -85,7 +85,7 @@ The pane the OPEN button opens has three tabs:
 ## What it does
 
 - **Live HP.** Readings refresh after every turn and whenever a limit moves by a point. Reset times count down each minute.
-- **Weekly pace.** The PACE bar works out whether your weekly limit will last until it resets if you keep going at the same rate. If it won't, the bar's marker sits left of the middle in red, with the percent of the limit you'd use, and `/pace` tells you when you'd run out. It makes no call in a week's first 12 hours, when one busy sitting would look like a blown week.
+- **Weekly pace.** The PACE bar works out whether your weekly limit will last until it resets if you keep going at the same rate. If it won't, the bar's marker sits left of the middle in red, with the percent of the limit you'd use, and `/pace` says what percent of the limit you'd use by the reset. It makes no call in a week's first 12 hours, when one busy sitting would look like a blown week.
 - **An animated villager.** He blinks and breathes in every state. He grins and chops away with his pickaxe for as long as the bar is green; as HP falls his swing slows, his head droops, a bandage appears, then tears; near zero he sobs and trembles.
 - **Bars that feel alive.** They sweep in, energy stripes flow through them, a shine passes along, and sparks drift off the leading edge. The heart beats faster as HP drops.
 - **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+; a full one shows **MAX**) and red-alert chevrons on a low one.
@@ -112,7 +112,7 @@ The pane the OPEN button opens has three tabs:
 | `/hp version` | Say which version you have and whether a newer one is out |
 | `/hp autoupdate off` | Tell you about new versions instead of installing them (`on` to go back) |
 | `/ultra on` | Ultra layout: hide SESSION (`/ultra off`, `/ultra auto`) |
-| `/pace` | Say whether your weekly limit lasts at this rate, and when it runs out if not |
+| `/pace` | Say whether your weekly limit lasts at this rate, as a percent of the limit by the reset |
 | `/pace over` | Preview being over pace (`/pace ok` previews being on track) |
 | `/pace off` | Back to your real pace |
 
