@@ -5,7 +5,7 @@ import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } fro
 import { backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
-import { CURRENCIES, asCurrency, estimateUsd, fallbackRate, fmtMoney, promptUsd, rateFor } from './money'
+import { CURRENCIES, addTurn, asCurrency, estimateUsd, fallbackRate, fmtMoney, promptUsd, rateFor } from './money'
 import { addUse, lastDays, readHistory, sumDays, usageChart } from './usage'
 import { NOT_CATALOG, dailyCheck, installedVersion, isAutoUpdate, isCatalogPath, isNewer, latestVersion, runUpdate } from './update'
 
@@ -459,19 +459,12 @@ export const register: Register = (on, options) => {
     if (u !== undefined) {
       // Worked out from the tokens at API prices, for hosts that keep no cost of their own.
       const est = estimateUsd(u)
-      await update($, lastPromptAtom, t => (t === null ? t : { ...t, estUsd: (t.estUsd ?? 0) + est }))
       const hasLedger = (await $.session.usage().catch(() => null))?.cost !== undefined
       if (!hasLedger) await recordUse($, { usd: est }).catch(() => undefined)
       // New tokens only: cache reads re-read the chat each turn and would swamp the day.
       await recordUse($, { tokens: u.input_tokens + u.output_tokens + u.cache_creation_input_tokens }).catch(() => undefined)
-      await update($, lastPromptAtom, prev => {
-        const t = prev ?? emptyTokens()
-        const input = t.input + u.input_tokens
-        const output = t.output + u.output_tokens
-        const cacheRead = t.cacheRead + u.cache_read_input_tokens
-        const cacheWrite = t.cacheWrite + u.cache_creation_input_tokens
-        return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite }
-      })
+      // Tokens and estimated cost added together, every other field (Claude Code's own cost) kept.
+      await update($, lastPromptAtom, prev => addTurn(prev ?? emptyTokens(), u))
     }
     return next(e)
   })

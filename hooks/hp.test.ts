@@ -2,7 +2,7 @@ import type { On, RenderElement } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
 import { fmtTokens, isUltra, pacePosition, paceShort, promptSummary, weeklyPace } from './hud'
-import { asCurrency, estimateUsd, fmtMoney } from './money'
+import { addTurn, asCurrency, estimateUsd, fmtMoney, promptUsd } from './money'
 import { dayKey, lastDays, sumDays } from './usage'
 import { ordered, parseArtifacts } from './library'
 import { isCatalogPath, isNewer } from './update'
@@ -390,4 +390,15 @@ test('cost: worked out from the tokens at API prices when Claude Code gives none
   expect(fmtMoney(usd, 'AUD', 1.53)).toBe('A$0.13')
   expect(estimateUsd({ input_tokens: 1e6, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' })).toBe(2)
   expect(estimateUsd({ input_tokens: 0, output_tokens: 1e6, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-fable-5-2' })).toBe(40)
+})
+
+test('cost: adding a turn keeps the cost, so the card shows it after the prompt', () => {
+  const turn = { input_tokens: 4, output_tokens: 163, cache_read_input_tokens: 394931, cache_creation_input_tokens: 5, model: 'claude-opus-5-5' }
+  const start = { total: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  const once = addTurn(start, turn)
+  const twice = addTurn(once, turn)
+  expect(fmtMoney(promptUsd(once) ?? 0, 'AUD', 1.53)).toBe('A$0.13')
+  expect(fmtMoney(promptUsd(twice) ?? 0, 'AUD', 1.53)).toBe('A$0.25')
+  // Claude Code's own figure, where it gave one, survives the next turn and wins.
+  expect(promptUsd(addTurn({ ...once, usd: 0.5 }, turn))).toBe(0.5)
 })

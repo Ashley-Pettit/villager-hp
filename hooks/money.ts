@@ -85,3 +85,13 @@ export const estimateUsd = (u: TurnTokens) => {
 
 // The prompt's cost: Claude Code's own figure where it gave one, else the estimate.
 export const promptUsd = (t: PromptTokens | null) => (t === null ? undefined : t.usd ?? t.estUsd)
+
+// A prompt's totals after one more model turn: its tokens and estimated cost
+// added, everything else it holds (Claude Code's own cost) kept as it was.
+export const addTurn = (t: PromptTokens, u: TurnTokens): PromptTokens => {
+  const input = t.input + u.input_tokens
+  const output = t.output + u.output_tokens
+  const cacheRead = t.cacheRead + u.cache_read_input_tokens
+  const cacheWrite = t.cacheWrite + u.cache_creation_input_tokens
+  return { ...t, input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite, estUsd: (t.estUsd ?? 0) + estimateUsd(u) }
+}
