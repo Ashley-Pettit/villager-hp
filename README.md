@@ -65,14 +65,14 @@ On an Ultra plan the 5-hour window doesn't apply, so the card hides **SESSION** 
 
 ## Open: your artifacts, docs and videos
 
-The **Open** button under the card (or `/open`) opens a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
+The **Open** button at the right of the card (or `/open`) opens a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
 
 - Most recently edited at the top.
 - Press ☆ to pin something; pinned things stay at the top, across sessions. Press ★ to unpin.
 - Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
 - An artifact opens in your browser; a doc or video opens in its own app.
 
-Under the card, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, then the new tokens it used (`LAST PROMPT ~A$0.13 · 172 new tokens`). Hover over it for the full breakdown: tokens in, out and newly cached, and how much of the chat Claude re-read from cache. New tokens leave out those cache reads, which grow with the length of the chat rather than the work. The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the same breakdown.
+At the right of the card, under the **Open** button, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, then the new tokens it used (`LAST PROMPT ~A$0.13 · 172 new tokens`). Hover over it for the full breakdown: tokens in, out and newly cached, and how much of the chat Claude re-read from cache. New tokens leave out those cache reads, which grow with the length of the chat rather than the work. The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the same breakdown.
 
 ## AI usage and settings
 

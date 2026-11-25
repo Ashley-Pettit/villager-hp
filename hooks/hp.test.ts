@@ -156,7 +156,7 @@ test('desktop: /ultra on swaps SESSION for the PACE bar', async ($, on) => {
   const standard = await card()
   expect(standard).toMatch(/>SESSION</)
   expect(standard).toMatch(/>PACE</)
-  expect(standard).toMatch(/viewBox="0 0 960 94"/)
+  expect(standard).toMatch(/viewBox="0 0 816 94"/)
   await $.command.run(ultraCmd('on'))
   const ultra = await card()
   expect(ultra).not.toMatch(/>SESSION</)
@@ -383,7 +383,7 @@ test('desktop: after a prompt, the row under the card holds the last prompt and 
   // aren't visible to the test kit, so this checks what each holds).
   expect(await ui.find({ type: 'Box', key: 'tokens' })).toBeDefined()
   expect(await ui.find({ type: 'Box', key: 'tokens-detail' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /new tokens/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /new$/ })).toBeDefined()
   // Open sits in the same panel, at the row's right.
   expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Re-read from cache' })).toBeDefined()

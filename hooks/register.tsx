@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } from '../types'
-import { backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
+import { CARD_W_BESIDE_OPEN, backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
@@ -568,36 +568,42 @@ export const register: Register = (on, options) => {
         all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
         (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`)
       const sum = tokens === null ? null : promptSummary(tokens, cost)
-      // One dark rounded panel: the card as a plain image, then a row inside the
-      // same panel with the last prompt at the left (hover for the breakdown) and
-      // Open at the right. Colours are set for the dark panel, whatever the theme.
+      // One dark rounded panel: the card at the left (85%, drawn narrower so its
+      // bars are shorter) and a column at the right (15%) with Open and, under
+      // it, the last prompt; hover that for the breakdown, which shows under the
+      // panel. Side by side, nothing laid over the image, so its size never
+      // matters. Colours are set for the dark panel, whatever the theme.
       const C = { muted: '#8f9aa7', text: '#e6ebf1', cost: '#86efac' }
-      const lineParts = sum === null
-        ? [<Text key="none" size="caption" color={C.muted}>LAST PROMPT  —</Text>]
-        : [
-            <Text key="label" size="caption" weight="bold" color={C.muted}>LAST PROMPT</Text>,
-            ...(sum.cost ? [<Text key="cost" size="caption" weight="bold" color={C.cost}>{sum.cost}</Text>] : []),
-            <Text key="fresh" size="caption" color={C.text}>{`${sum.fresh} new tokens`}</Text>,
-            <Text key="info" size="caption" color={C.muted}>ⓘ</Text>,
-          ]
       return (
         <Box flexDirection="column">
           {below}
           <Box flexDirection="column" backgroundColor="#0f1318" borderStyle="round" borderColor="#2a313b" paddingX={1}>
-            <Svg key={`hp-${m}-${paceZone(pace)}-${ultra}`} source={hudSvg(all, { pace, hideSession: ultra })} alt={`Claude's health: ${alt}`} />
-            <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} paddingX={1} paddingBottom={1}>
-              <Box key="tokens" flexDirection="row" alignItems="center" gap={1} hover={{ scope: TOKENS_SCOPE }}>
-                {...lineParts}
+            <Box flexDirection="row" alignItems="center">
+              <Box width="85%">
+                <Svg key={`hp-${m}-${paceZone(pace)}-${ultra}`} source={hudSvg(all, { pace, hideSession: ultra, width: CARD_W_BESIDE_OPEN })} alt={`Claude's health: ${alt}`} />
               </Box>
-              <Button key="open" label="Open" variant="secondary" onPress={() => openPane($)}>
-                <Text>⊞</Text>
-                <Text weight="semibold">{' Open'}</Text>
-              </Button>
+              <Box width="15%" flexDirection="column" alignItems="center" justifyContent="center" gap={1}>
+                <Button key="open" label="Open" variant="primary" onPress={() => openPane($)}>
+                  <Text>⊞</Text>
+                  <Text weight="semibold">{' Open'}</Text>
+                </Button>
+                <Box key="tokens" flexDirection="column" alignItems="center" hover={{ scope: TOKENS_SCOPE }}>
+                  <Text size="caption" weight="bold" color={C.muted}>{sum === null ? 'LAST PROMPT —' : 'LAST PROMPT ⓘ'}</Text>
+                  {sum === null ? (
+                    <></>
+                  ) : (
+                    <Box flexDirection="row" gap={1}>
+                      {...(sum.cost ? [<Text key="cost" size="caption" weight="bold" color={C.cost}>{sum.cost}</Text>] : [])}
+                      <Text key="fresh" size="caption" color={C.text}>{`${sum.fresh} new`}</Text>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
             </Box>
             {sum === null ? (
               <></>
             ) : (
-              <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" gap={2} paddingX={1} paddingBottom={1}>
+              <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" justifyContent="flex-end" gap={2} paddingX={1} paddingBottom={1}>
                 {...sum.detail.map(([label, value]) => (
                   <Box key={`detail:${label}`} flexDirection="row" gap={1}>
                     <Text size="caption" color={C.muted}>{label}</Text>

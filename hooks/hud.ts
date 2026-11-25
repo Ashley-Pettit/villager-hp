@@ -130,7 +130,10 @@ export const emptyTokens = (): PromptTokens => ({ total: 0, input: 0, output: 0,
 
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
 
-export const HUD_W = 960
+// The card's width in its own units: 960 alone, narrower beside the Open column
+// (CARD_W_BESIDE_OPEN), so its bars are shorter and its height stays the same.
+export let HUD_W = 960
+export const CARD_W_BESIDE_OPEN = 816 // 85% of 960
 // 64 for two rows, 88 for three; hudSvg sets it for the card it draws.
 export let HUD_H = 64
 // A little air above the card, in the same units. Outside the card's own
@@ -141,9 +144,9 @@ const ICON_X = 74
 const LABEL_X = 92
 const BAR_X = 172
 // The bars fill the card, less the values and reset chips at its right.
-const BAR_W = 960 - 16 - 78 - 66 - 16 - 172
+let BAR_W = 960 - 16 - 78 - 66 - 16 - 172
 const BAR_H = 12
-const VALUE_X = BAR_X + BAR_W + 16
+let VALUE_X = BAR_X + BAR_W + 16
 const ROW_CY = [20, 44, 68] // the rows' centre lines, top down
 const UI = `font-family="'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif"`
 
@@ -537,7 +540,7 @@ const aurora = (colour: string) => `
       <animate attributeName="cx" values="120;420;120" dur="14s" repeatCount="indefinite"/>
     </ellipse>
     <ellipse cx="700" cy="30" rx="150" ry="40" fill="url(#aura2)">
-      <animate attributeName="cx" values="760;460;760" dur="18s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="${HUD_W - 200};${HUD_W - 500};${HUD_W - 200}" dur="18s" repeatCount="indefinite"/>
     </ellipse>
   </g>
   <radialGradient id="aura"><stop offset="0" stop-color="${colour}" stop-opacity="0.16"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient>
@@ -546,9 +549,13 @@ const aurora = (colour: string) => `
 // What the card adds beyond the bars: the weekly pace bar under WEEKLY
 // (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
 // the last prompt's tokens.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean }
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; width?: number }
 
 export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
+  // The bars take what the card's width leaves after the labels, values and chips.
+  HUD_W = extra.width ?? 960
+  BAR_W = HUD_W - 16 - 78 - 66 - 16 - BAR_X
+  VALUE_X = BAR_X + BAR_W + 16
   const m = mood(all)
   const dead = killer(all)
   const known = all.flatMap(b => (b.hp === null ? [] : [b.hp]))
