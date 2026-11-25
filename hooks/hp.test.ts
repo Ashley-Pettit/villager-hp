@@ -156,7 +156,7 @@ test('desktop: /ultra on swaps SESSION for the PACE bar', async ($, on) => {
   const standard = await card()
   expect(standard).toMatch(/>SESSION</)
   expect(standard).toMatch(/>PACE</)
-  expect(standard).toMatch(/viewBox="0 0 816 94"/)
+  expect(standard).toMatch(/viewBox="0 0 960 94"/)
   await $.command.run(ultraCmd('on'))
   const ultra = await card()
   expect(ultra).not.toMatch(/>SESSION</)
@@ -213,15 +213,15 @@ test('library: pinned first, then the most recently edited', () => {
   expect(ordered(items, [], 'doc').rest.map(i => i.title)).toEqual(['Quarterly plan'])
 })
 
-test('desktop: OPEN sits in a row under the card, not over it', async ($, on) => {
+test('desktop: the card is a plain image with nothing around it, and no Open button', async ($, on) => {
   statusRow(on)
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   await $.command.run(hp('64'))
 
-  expect((await ui.find({ type: 'Button', key: 'open' }))?.props.label).toBe('Open')
-  // A plain image, with nothing laid over it: the row under it holds OPEN.
+  expect(await ui.find({ type: 'Button', key: 'open' })).toBeUndefined()
   expect((await ui.find({ type: 'Svg' }))?.props.isInteractive).toBeUndefined()
-  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toMatch(/GOD MODE|ULTRA|LAST PROMPT/)
+  // The last prompt sits at the card's right end, "—" until the first prompt.
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toMatch(/LAST PROMPT<\/text><text[^>]*>—</)
 })
 
 test('pane: /open lists artifacts and local docs and videos, recent first, and pins one to the top', async ($, on) => {
@@ -373,7 +373,7 @@ test('/pace over gives a percent, never a date', async ($, on) => {
   expect(said.text).not.toMatch(/out (by|in)|Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
 })
 
-test('desktop: after a prompt, the foot of the card shows the last prompt, and its breakdown waits for hover', async ($, on) => {
+test('desktop: after a prompt, the card shows the last prompt at its right end', async ($, on) => {
   statusRow(on)
   on('prompt.submit', (_, e) => e as never)
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
@@ -381,11 +381,7 @@ test('desktop: after a prompt, the foot of the card shows the last prompt, and i
 
   const card = String((await ui.find({ type: 'Svg' }))?.props.source)
   expect(card).toMatch(/LAST PROMPT/)
-  expect(card).toMatch(/0 new tokens/)
-  expect(await ui.find({ type: 'Box', key: 'card' })).toBeDefined()
-  expect(await ui.find({ type: 'Box', key: 'tokens-detail' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Re-read from cache' })).toBeDefined()
-  expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
+  expect(card).toMatch(/new tokens/)
 })
 
 test('cost: worked out from the tokens at API prices when Claude Code gives none', () => {

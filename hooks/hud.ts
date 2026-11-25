@@ -130,10 +130,10 @@ export const emptyTokens = (): PromptTokens => ({ total: 0, input: 0, output: 0,
 
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
 
-// The card's width in its own units: 960 alone, narrower beside the Open column
-// (CARD_W_BESIDE_OPEN), so its bars are shorter and its height stays the same.
 export let HUD_W = 960
-export const CARD_W_BESIDE_OPEN = 816 // 85% of 960
+// The right end of the card holds the last prompt; the bars fill what's left.
+const PROMPT_W = 150
+const PROMPT_GAP = 24
 // 64 for two rows, 88 for three; hudSvg sets it for the card it draws.
 export let HUD_H = 64
 // A little air above the card, in the same units. Outside the card's own
@@ -514,12 +514,22 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
   return icon + label + track + ends + reach + centre + marker + value + chip
 }
 
-// The last prompt along the card's foot: a hairline, then "LAST PROMPT
-// ~A$0.13 · 21k new tokens", and a hint that hovering shows the breakdown.
-const footerLine = (f: { cost: string | null; fresh: string }, top: number) => `
-  <line x1="${ICON_X}" y1="${top + 1}" x2="${HUD_W - 28}" y2="${top + 1}" stroke="#ffffff" stroke-opacity="0.07"/>
-  <text x="${ICON_X}" y="${top + 11}" ${UI} font-size="9.5" font-weight="700" letter-spacing="1.2" fill="${T.muted}">LAST PROMPT<tspan dx="8" letter-spacing="0" font-weight="700" fill="#86efac">${f.cost ? `~${f.cost}` : ''}</tspan><tspan dx="${f.cost ? 6 : 0}" letter-spacing="0" font-weight="600" fill="${T.text}">${f.fresh} new tokens</tspan></text>
-  <text x="${HUD_W - 28}" y="${top + 11}" text-anchor="end" ${UI} font-size="9" fill="${T.faint}">hover for breakdown ⓘ</text>`
+// The last prompt, at the card's right end: a small label, the rough cost at
+// API rates large, and the new tokens under it. A thin rule sets it apart
+// from the reset times. "—" until the first prompt.
+const promptBlock = (p: { cost: string | null; fresh: string } | null, rowsH: number) => {
+  const x = HUD_W - 16 - PROMPT_W
+  const mid = x + PROMPT_W / 2
+  const top = rowsH / 2 - 22
+  const rule = `<line x1="${x}" y1="${rowsH / 2 - 20}" x2="${x}" y2="${rowsH / 2 + 20}" stroke="#ffffff" stroke-opacity="0.08"/>`
+  const label = `<text x="${mid}" y="${top + 9}" text-anchor="middle" ${UI} font-size="9.5" font-weight="700" letter-spacing="1.4" fill="${T.muted}">LAST PROMPT</text>`
+  if (p === null) return `${rule}${label}<text x="${mid}" y="${top + 30}" text-anchor="middle" ${UI} font-size="15" font-weight="600" fill="${T.faint}">—</text>`
+  const big = p.cost ? `~${p.cost}` : p.fresh
+  const small = p.cost ? `${p.fresh} new tokens` : 'new tokens'
+  return `${rule}${label}
+  <text x="${mid}" y="${top + 30}" text-anchor="middle" ${UI} font-size="18" font-weight="800" fill="${p.cost ? '#86efac' : T.text}">${big}</text>
+  <text x="${mid}" y="${top + 44}" text-anchor="middle" ${UI} font-size="10.5" font-weight="500" fill="${T.muted}">${small}</text>`
+}
 
 // The last prompt in words, for the row under the card: the rough cost, the
 // new tokens, and the breakdown its hover reveals.
@@ -557,12 +567,13 @@ const aurora = (colour: string) => `
 // (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
 // the last prompt's tokens.
 // `footer`: the last prompt, drawn as a slim line along the card's foot.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean; width?: number; footer?: { cost: string | null; fresh: string } | null }
+// `prompt`: the last prompt for the card's right end; null before the first.
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; prompt?: { cost: string | null; fresh: string } | null }
 
 export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   // The bars take what the card's width leaves after the labels, values and chips.
-  HUD_W = extra.width ?? 960
-  BAR_W = HUD_W - 16 - 78 - 66 - 16 - BAR_X
+  HUD_W = 960
+  BAR_W = HUD_W - 16 - PROMPT_W - PROMPT_GAP - 78 - 66 - 16 - BAR_X
   VALUE_X = BAR_X + BAR_W + 16
   const m = mood(all)
   const dead = killer(all)
@@ -578,9 +589,7 @@ export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   ]
   // A third row makes the card taller; the avatar drops to its middle.
   const rowsH = drawers.length > 2 ? 88 : 64
-  // The footer line adds a strip under the rows; the avatar stays centred on the rows.
-  const FOOT = 16
-  HUD_H = rowsH + (extra.footer ? FOOT : 0)
+  HUD_H = rowsH
   const dy = (rowsH - 64) / 2
   const rows = drawers.map((draw, i) => draw(ROW_CY[i] ?? 20, 0.15 + i * 0.2)).join('')
   const mid = (svg: string) => (dy ? `<g transform="translate(0 ${dy})">${svg}</g>` : svg)
@@ -624,7 +633,7 @@ export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   ${hologram()}
   ${mid(radar(m) + avatar(m, low))}
   ${rows}
-  ${extra.footer ? footerLine(extra.footer, rowsH) : ''}
+  ${promptBlock(extra.prompt ?? null, rowsH)}
   ${cornerBrackets()}
   ${deathScreen}
   </g>

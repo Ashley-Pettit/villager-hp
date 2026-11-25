@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } from '../types'
-import { CARD_W_BESIDE_OPEN, backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
+import { backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, asCurrency, estimateUsd, fallbackRate, fmtMoney, promptUsd, rateFor } from './money'
@@ -21,8 +21,6 @@ type Tab = LibKind | 'all'
 const tabAtom = atom({ plugin: 'villager-hp', key: 'libraryTab' } as const, 'all' as Tab)
 const queryAtom = atom({ plugin: 'villager-hp', key: 'libraryQuery' } as const, '')
 const PANE = 'villager-open'
-// Hovering the last prompt line lights this group, which reveals its breakdown.
-const TOKENS_SCOPE = 'villager-hp-tokens'
 const TABS: readonly [Tab, string][] = [['all', 'All'], ['artifact', 'Artifacts'], ['doc', 'Docs'], ['video', 'Videos']]
 // Each kind's chip: its glyph, colour, a dark tint behind it, and its name.
 const KIND_LOOK: Record<LibKind, { icon: string; color: string; tint: string; name: string }> = {
@@ -571,51 +569,26 @@ export const register: Register = (on, options) => {
     // Chosen by the surface, not by which elements the table lists: a table can
     // carry an element its surface draws as nothing.
     if (e.surface !== 'terminal' && 'Svg' in elements) {
-      const { Box, Svg, Button, Text } = elements
       const alt =
         all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
         (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`)
       const sum = tokens === null ? null : promptSummary(tokens, cost)
-      // One dark rounded panel: the card at the left (85%, drawn narrower so its
-      // bars are shorter) with the last prompt along its foot, drawn into the
-      // image so its size is exact; Open alone in the column at the right (15%).
-      // Hovering the card reveals the breakdown under it. Side by side, nothing
-      // laid over the image, so the app's sizing can't move anything.
-      const C = { muted: '#8f9aa7', text: '#e6ebf1' }
+      // The card alone, at full width, as a plain image: the bars, and the last
+      // prompt at its right end. Nothing native around it to wrap or stretch.
+      const { Box, Svg } = elements
       return (
         <Box flexDirection="column">
           {below}
-          <Box flexDirection="column" backgroundColor="#0f1318" borderStyle="round" borderColor="#2a313b" paddingX={1}>
-            <Box flexDirection="row" alignItems="center">
-              <Box key="card" width="85%" hover={{ scope: TOKENS_SCOPE }}>
-                <Svg
-                  key={`hp-${m}-${paceZone(pace)}-${ultra}`}
-                  source={hudSvg(all, { pace, hideSession: ultra, width: CARD_W_BESIDE_OPEN, footer: sum === null ? null : { cost, fresh: sum.fresh } })}
-                  alt={`Claude's health: ${alt}`}
-                />
-              </Box>
-              <Box width="15%" alignItems="center" justifyContent="center">
-                <Button key="open" label="Open" variant="primary" onPress={() => openPane($)} />
-              </Box>
-            </Box>
-            {sum === null ? (
-              <></>
-            ) : (
-              <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" gap={2} paddingX={1} paddingBottom={1}>
-                {...sum.detail.map(([label, value]) => (
-                  <Box key={`detail:${label}`} flexDirection="row" gap={1}>
-                    <Text size="caption" color={C.muted}>{label}</Text>
-                    <Text size="caption" weight="semibold" color={C.text}>{value}</Text>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
+          <Svg
+            key={`hp-${m}-${paceZone(pace)}-${ultra}`}
+            source={hudSvg(all, { pace, hideSession: ultra, prompt: sum === null ? null : { cost, fresh: sum.fresh } })}
+            alt={`Claude's health: ${alt}`}
+          />
         </Box>
       )
     }
 
-    const { Box, Text, Button } = elements
+    const { Box, Text } = elements
     const dead = killer(all)
     return (
       <Box flexDirection="column">
@@ -668,11 +641,6 @@ export const register: Register = (on, options) => {
             ) : (
               <></>
             )}
-            <Box flexDirection="row">
-              <Text>{'       '}</Text>
-              <Button key="open" label="Open" hotkey="o" onPress={() => openPane($)} />
-              <Text dimColor>{'  artifacts, docs and videos'}</Text>
-            </Box>
           </Box>
         )}
       </Box>

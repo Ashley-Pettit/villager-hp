@@ -65,18 +65,18 @@ On an Ultra plan the 5-hour window doesn't apply, so the card hides **SESSION** 
 
 ## Open: your artifacts, docs and videos
 
-The **Open** button at the right of the card (or `/open`) opens a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
+Type `/open` to open a pane listing your claude.ai artifacts, and the Word docs and videos in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders.
 
 - Most recently edited at the top.
 - Press ☆ to pin something; pinned things stay at the top, across sessions. Press ★ to unpin.
 - Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
 - An artifact opens in your browser; a doc or video opens in its own app.
 
-Along the foot of the card, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, then the new tokens it used (`LAST PROMPT ~A$0.13 · 172 new tokens`). Hover over the card for the full breakdown: tokens in, out and newly cached, and how much of the chat Claude re-read from cache. New tokens leave out those cache reads, which grow with the length of the chat rather than the work. The cost is Claude Code's own estimate (what `/cost` shows) where it gives one, else worked out from the tokens at published API prices; it's converted at a daily exchange rate, and on a subscription you aren't billed it. `/hp` gives the same breakdown.
+At the right end of the card, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, with the new tokens it used underneath: what you sent, what Claude wrote and what was newly cached, leaving out the chat Claude re-reads from cache each turn. The cost is Claude Code's own estimate (what `/cost` shows) where it gives one, else worked out from the tokens at published API prices; it's converted at a daily exchange rate, and on a subscription you aren't billed it. `/hp` gives the full breakdown.
 
 ## AI usage and settings
 
-The pane the OPEN button opens has three tabs:
+The pane `/open` opens has three tabs:
 
 - **Library:** your artifacts, docs and videos (above).
 - **AI usage:** rough cost, new tokens and prompts today, over 7 days and over 30 days, a 14-day chart, and a day-by-day list. It counts every session from when 2.11 was installed and keeps 90 days. `/hp usage` opens it.
@@ -89,7 +89,7 @@ The pane the OPEN button opens has three tabs:
 - **An animated villager.** He blinks and breathes in every state. He grins and chops away with his pickaxe for as long as the bar is green; as HP falls his swing slows, his head droops, a bandage appears, then tears; near zero he sobs and trembles.
 - **Bars that feel alive.** They sweep in, energy stripes flow through them, a shine passes along, and sparks drift off the leading edge. The heart beats faster as HP drops.
 - **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+; a full one shows **MAX**) and red-alert chevrons on a low one.
-- **Open button.** Your artifacts, Word docs and videos, newest first, with pins.
+- **`/open`.** Your artifacts, Word docs and videos, newest first, with pins.
 - **Death.** At 0 HP the villager goes grey, gets X eyes and a halo, and the card reads *Claude has been defeated* with the time you'll be back.
 
 ![Low HP: a crying villager, red bars, red-alert chevrons and an Innovator badge](assets/screenshot-low.png)
@@ -105,7 +105,7 @@ The pane the OPEN button opens has three tabs:
 | `/hp off` | Back to your real limits |
 | `/die` | Watch Claude die (same as `/hp 0`) |
 | `/revive` | Bring Claude back to your real limits |
-| `/open` | Open your artifacts, Word docs and videos (same as the OPEN button) |
+| `/open` | Open your artifacts, Word docs and videos, AI usage and settings |
 | `/hp usage` | Your AI usage history: tokens and rough cost per day |
 | `/hp settings` | Currency, Ultra layout and auto update |
 | `/hp update` | Check for a newer villager-hp and install it (restart Claude to use it) |
@@ -134,7 +134,7 @@ Readings appear on Claude subscriptions, which report rate-limit windows; on API
 
 ## What's new
 
-- **2.11** The last prompt's rough cost at API rates and new tokens, with the full breakdown on hover, in your currency. AI usage history and Settings tabs. A nicer OPEN button and library (search, counts, cards grouped by Today, This week and Earlier). No more hourglass, cap date or over-pace chip: the PACE bar's marker and percent show it.
+- **2.11** The last prompt's rough cost at API rates and new tokens, in your currency (`/hp` for the breakdown). AI usage history and Settings tabs. A nicer OPEN button and library (search, counts, cards grouped by Today, This week and Earlier). No more hourglass, cap date or over-pace chip: the PACE bar's marker and percent show it.
 - **2.10** Updates itself: a daily check that installs a newer version, `/hp update` to check now, `/hp autoupdate off` to be told instead.
 - **2.9** A PACE bar under WEEKLY (SESSION hidden on Ultra), the OPEN pane for your artifacts, docs and videos with pins, and the last prompt's tokens.
 - **2.8** Weekly pace: an hourglass when the week is on course to run out before it resets, plus `/pace`. The villager stays cheerful for as long as the bar is green.
