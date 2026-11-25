@@ -1,7 +1,7 @@
 import type { On, RenderElement } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
-import { fmtTokens, isUltra, pacePosition, paceShort, promptSummary, weeklyPace } from './hud'
+import { bars, fmtTokens, hudSvg, isUltra, pacePosition, paceShort, weeklyPace } from './hud'
 import { addTurn, asCurrency, estimateUsd, fmtMoney, promptUsd } from './money'
 import { dayKey, lastDays, sumDays } from './usage'
 import { ordered, parseArtifacts } from './library'
@@ -315,18 +315,6 @@ test('money: rough cost in the chosen currency', () => {
   expect(asCurrency('XYZ')).toBe('AUD')
 })
 
-test('last prompt: cost first, then new tokens; the breakdown keeps every part', () => {
-  const sum = promptSummary({ total: 48210, input: 1, output: 1, cacheRead: 48207, cacheWrite: 1, usd: 0.27 }, 'A$0.41')
-  expect(sum.cost).toBe('~A$0.41')
-  expect(sum.fresh).toBe('3')
-  expect(sum.detail).toEqual([
-    ['Rough cost (API rates)', '~A$0.41'],
-    ['In', '1'],
-    ['Out', '1'],
-    ['Newly cached', '1'],
-    ['Re-read from cache', '48k'],
-  ])
-})
 
 // ---- AI usage history and settings ----
 
@@ -349,7 +337,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     expect(await ui.find({ type: 'Text', text: 'TODAY' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'LAST 30 DAYS' })).toBeDefined()
-    if (surface === 'desktop') expect(String((await ui.find({ type: 'Svg' }))?.props.alt)).toMatch(/New tokens per day/)
+    if (surface === 'desktop') expect(String((await ui.find({ type: 'Svg' }))?.props.alt)).toMatch(/Rough cost per day/)
   })
 }
 
@@ -373,7 +361,7 @@ test('/pace over gives a percent, never a date', async ($, on) => {
   expect(said.text).not.toMatch(/out (by|in)|Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
 })
 
-test('desktop: after a prompt, the card shows the last prompt at its right end', async ($, on) => {
+test('desktop: after a prompt, the card shows its rough cost, never tokens', async ($, on) => {
   statusRow(on)
   on('prompt.submit', (_, e) => e as never)
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
@@ -381,7 +369,7 @@ test('desktop: after a prompt, the card shows the last prompt at its right end',
 
   const card = String((await ui.find({ type: 'Svg' }))?.props.source)
   expect(card).toMatch(/LAST PROMPT/)
-  expect(card).toMatch(/new tokens/)
+  expect(card).not.toMatch(/tokens/)
 })
 
 test('cost: worked out from the tokens at API prices when Claude Code gives none', () => {
@@ -401,4 +389,11 @@ test('cost: adding a turn keeps the cost, so the card shows it after the prompt'
   expect(fmtMoney(promptUsd(twice) ?? 0, 'AUD', 1.53)).toBe('A$0.25')
   // Claude Code's own figure, where it gave one, survives the next turn and wins.
   expect(promptUsd(addTurn({ ...once, usd: 0.5 }, turn))).toBe(0.5)
+})
+
+test('card: LAST PROMPT shows the rough cost large, at API rates', () => {
+  const svg = hudSvg(bars(week(20, 5), null, NOW), { prompt: { cost: 'A$0.13' } })
+  expect(svg).toMatch(/>~A\$0\.13<\/text>/)
+  expect(svg).toMatch(/>at API rates<\/text>/)
+  expect(svg).not.toMatch(/tokens/)
 })

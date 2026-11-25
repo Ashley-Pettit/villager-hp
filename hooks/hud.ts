@@ -514,36 +514,20 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
   return icon + label + track + ends + reach + centre + marker + value + chip
 }
 
-// The last prompt, at the card's right end: a small label, the rough cost at
-// API rates large, and the new tokens under it. A thin rule sets it apart
+// The last prompt's rough cost at API rates, at the card's right end: a small
+// label, the cost large, "at API rates" under it. A thin rule sets it apart
 // from the reset times. "—" until the first prompt.
-const promptBlock = (p: { cost: string | null; fresh: string } | null, rowsH: number) => {
+const promptBlock = (p: { cost: string | null } | null, rowsH: number) => {
   const x = HUD_W - 16 - PROMPT_W
   const mid = x + PROMPT_W / 2
   const top = rowsH / 2 - 22
   const rule = `<line x1="${x}" y1="${rowsH / 2 - 20}" x2="${x}" y2="${rowsH / 2 + 20}" stroke="#ffffff" stroke-opacity="0.08"/>`
   const label = `<text x="${mid}" y="${top + 9}" text-anchor="middle" ${UI} font-size="9.5" font-weight="700" letter-spacing="1.4" fill="${T.muted}">LAST PROMPT</text>`
-  if (p === null) return `${rule}${label}<text x="${mid}" y="${top + 30}" text-anchor="middle" ${UI} font-size="15" font-weight="600" fill="${T.faint}">—</text>`
-  const big = p.cost ? `~${p.cost}` : p.fresh
-  const small = p.cost ? `${p.fresh} new tokens` : 'new tokens'
+  if (p === null || p.cost === null) return `${rule}${label}<text x="${mid}" y="${top + 30}" text-anchor="middle" ${UI} font-size="15" font-weight="600" fill="${T.faint}">—</text>`
   return `${rule}${label}
-  <text x="${mid}" y="${top + 30}" text-anchor="middle" ${UI} font-size="18" font-weight="800" fill="${p.cost ? '#86efac' : T.text}">${big}</text>
-  <text x="${mid}" y="${top + 44}" text-anchor="middle" ${UI} font-size="10.5" font-weight="500" fill="${T.muted}">${small}</text>`
+  <text x="${mid}" y="${top + 31}" text-anchor="middle" ${UI} font-size="19" font-weight="800" fill="#86efac">~${p.cost}</text>
+  <text x="${mid}" y="${top + 44}" text-anchor="middle" ${UI} font-size="10" font-weight="500" fill="${T.muted}">at API rates</text>`
 }
-
-// The last prompt in words, for the row under the card: the rough cost, the
-// new tokens, and the breakdown its hover reveals.
-export const promptSummary = (t: PromptTokens, cost: string | null) => ({
-  cost: cost ? `~${cost}` : null,
-  fresh: fmtTokens(newTokens(t)),
-  detail: [
-    ['Rough cost (API rates)', cost ? `~${cost}` : '—'],
-    ['In', fmtTokens(t.input)],
-    ['Out', fmtTokens(t.output)],
-    ['Newly cached', fmtTokens(t.cacheWrite)],
-    ['Re-read from cache', fmtTokens(t.cacheRead)],
-  ] as [string, string][],
-})
 
 const gradient = (id: string, hp: number | null) => {
   const [a, b] = T[tone(hp ?? 100)]
@@ -567,8 +551,8 @@ const aurora = (colour: string) => `
 // (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
 // the last prompt's tokens.
 // `footer`: the last prompt, drawn as a slim line along the card's foot.
-// `prompt`: the last prompt for the card's right end; null before the first.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean; prompt?: { cost: string | null; fresh: string } | null }
+// `prompt`: the last prompt's rough cost for the card's right end; null before the first.
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; prompt?: { cost: string | null } | null }
 
 export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   // The bars take what the card's width leaves after the labels, values and chips.
