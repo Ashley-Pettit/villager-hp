@@ -12,6 +12,8 @@ export type PromptTokens = {
   output: number
   cacheRead: number
   cacheWrite: number
+  // Rough cost at API rates in US dollars, from Claude Code's own estimate; absent where it keeps none.
+  usd?: number
 }
 
 // One thing to open from the Open pane.
@@ -24,6 +26,10 @@ export type LibItem = {
   modifiedMs: number
   detail: string // the artifact's type, or the file's folder
 }
+
+// One day's AI use, as the AI usage tab shows it.
+export type DayUse = { tokens: number; usd: number; prompts: number }
+export type PaneTab = 'library' | 'usage' | 'settings'
 
 declare module 'claude-code' {
   interface PluginState {
@@ -40,12 +46,26 @@ declare module 'claude-code' {
       libraryLoading: boolean
       pins: string[]
       libraryTab: 'all' | 'artifact' | 'doc' | 'video'
+      // What you typed in the pane's search box.
+      libraryQuery: string
       // The plan you picked with /plan; auto by default.
       plan: Plan
       // The plan the account's login names, when it names one.
       accountPlan: string | null
       // Tokens of the most recent prompt; null before the first.
       lastPrompt: PromptTokens | null
+      // The session's estimated cost (US$) when the last prompt was sent: its cost is the rise since.
+      costAtSend: number | null
+      // US dollars to the chosen currency, today's rate.
+      fxRate: number
+      // The pane's tab: Library, AI usage or Settings.
+      paneTab: 'library' | 'usage' | 'settings'
+      // Tokens, rough cost (US$) and prompts per local day ("2026-11-25"), 90 days.
+      history: Record<string, DayUse>
+      // The session's estimated cost (US$) at the last measure, to add only what's new to today.
+      lastCostSeen: number | null
+      // Whether newer versions install by themselves.
+      autoUpdate: boolean
     }
   }
 }

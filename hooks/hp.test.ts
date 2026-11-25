@@ -1,7 +1,9 @@
 import type { On, RenderElement } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
-import { fmtTokens, isUltra, pacePosition, paceShort, weeklyPace } from './hud'
+import { bars, fmtTokens, hudSvg, isUltra, pacePosition, paceShort, weeklyPace } from './hud'
+import { asCurrency, fmtMoney } from './money'
+import { dayKey, lastDays, sumDays } from './usage'
 import { ordered, parseArtifacts } from './library'
 import { isNewer } from './update'
 
@@ -86,44 +88,28 @@ test('weekly pace: no call in the first hours of a week, or without a reading', 
 // /pace as the person types it.
 const pace = (args: string) => ({ ...hp(args), command: 'pace' }) as const
 
-test('desktop: /pace over floats the hourglass by the villager, and /pace ok takes it away', async ($, on) => {
+test('pace over: the PACE bar shows how far over, with no hourglass, date or over-pace chip', async ($, on) => {
   statusRow(on)
-
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   await $.command.run(hp('64'))
-  const card = async () => String((await ui.find({ type: 'Svg' }))?.props.source)
-
   await $.command.run(pace('over'))
-  const over = await card()
-  await $.command.run(pace('ok'))
-  const ok = await card()
+  const card = String((await ui.find({ type: 'Svg' }))?.props.source)
 
-  expect(over).toMatch(/M -2\.6,-3\.6 L 2\.6,-3\.6/)
-  expect(ok).not.toMatch(/M -2\.6,-3\.6 L 2\.6,-3\.6/)
-  // The villager is drawn the same either way: the hourglass is added, nothing of him changes.
-  const villager = (svg: string) => svg.match(/<g clip-path="url\(#avclip\)">[\s\S]*?<\/g>\s*<circle/)?.[0]
-  expect(villager(over)).toBeDefined()
-  expect(villager(over)).toBe(villager(ok))
+  expect(card).toMatch(/>130<tspan/)
+  expect(card).not.toMatch(/over pace/)
+  expect(card).not.toMatch(/M -2\.6,-3\.6 L 2\.6,-3\.6/)
+  expect(card).not.toMatch(/cap (in |Mon|Tue|Wed|Thu|Fri|Sat|Sun)/)
 })
 
-test('desktop: a dead villager gets no hourglass', async ($, on) => {
+test('terminal: pace over shows its percent on the PACE row, with no ⏳ date or over-pace text', async ($, on) => {
   statusRow(on)
-
-  const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  await $.command.run(pace('over'))
-  await $.command.run(hp('0'))
-
-  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toMatch(/M -2\.6,-3\.6 L 2\.6,-3\.6/)
-})
-
-test('terminal: /pace over marks the weekly row', async ($, on) => {
-  statusRow(on)
-
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'terminal', component: 'AbovePrompt', props: BAND })
   await $.command.run(hp('64'))
   await $.command.run(pace('over'))
 
-  expect(await ui.find({ type: 'Text', text: /⏳ out (by|in) / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /130%/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /over pace/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /⏳/ })).toBeUndefined()
 })
 
 // ---- 2.9: Ultra layout and last prompt tokens ----
@@ -149,7 +135,7 @@ test('pace bar: on track sits in the middle, plenty to the right, the cap to the
   expect(pacePosition({ isOver: true, projected: 400, runsOut: 'Thu 3pm' })).toBe(0)
   expect(paceShort({ isOver: false, projected: 70, runsOut: '' })).toBe('30% spare')
   expect(paceShort({ isOver: false, projected: 98, runsOut: '' })).toBe('on track')
-  expect(paceShort({ isOver: true, projected: 175, runsOut: 'Thu 3pm' })).toBe('cap Thu 3pm')
+  expect(paceShort({ isOver: true, projected: 175, runsOut: 'Thu 3pm' })).toBe('')
 })
 
 test('tokens: short counts', () => {
@@ -258,14 +244,18 @@ test('pane: /open lists artifacts and local docs and videos, recent first, and p
   })
   await $.command.run({ ...hp(''), command: 'open' })
 
-  const titles = async () => (await ui.findAll({})).filter(n => n.type === 'Link' || n.type === 'Button').map(n => String(n.props.label)).filter(l => !/^(All|Artifacts|Docs|Videos|Refresh|Refreshing…|★|☆)$/.test(l))
+  const titles = async () => (await ui.findAll({})).filter(n => n.type === 'Link' || n.type === 'Button').map(n => String(n.props.label)).filter(l => !/^(All|Artifacts|Docs|Videos|Refresh|Pin|Unpin|OPEN)$|^[⊞▤⚙] /.test(l))
   // The scan runs in the background; give it a few turns of the loop.
   for (let i = 0; i < 50 && (await titles()).length < 5; i++) await new Promise(r => (globalThis as unknown as { setTimeout: (f: (v: unknown) => void, ms: number) => void }).setTimeout(r, 5))
   expect(await titles()).toEqual(['Quarterly plan', 'Budget.docx', 'Linda avatar', 'Road Defect Sorter', 'Holiday.mp4'])
 
   await ui.press({ key: 'pin:/h/u/Movies/Holiday.mp4' })
   expect((await titles())[0]).toBe('Holiday.mp4')
-  expect(await ui.find({ type: 'Text', text: 'Pinned' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /PINNED/ })).toBeDefined()
+
+  // The search box narrows the list as you type.
+  await $.ui.input({ plugin: 'villager-hp', key: 'search', text: 'budget', kind: 'change' } as never)
+  expect(await titles()).toEqual(['Budget.docx'])
 })
 
 // ---- updates ----
@@ -306,4 +296,56 @@ test('/hp update says so when this is already the latest, and runs nothing', asy
   const out = (await $.command.run({ ...hp('update') })) as { text?: string }
   expect(out.text).toBe('villager-hp 2.10.0 is the latest.')
   expect(ran).toEqual([])
+})
+
+// ---- the last prompt's rough cost ----
+
+test('money: rough cost in the chosen currency', () => {
+  expect(fmtMoney(0.274, 'AUD', 1.53)).toBe('A$0.42')
+  expect(fmtMoney(0.002, 'AUD', 1.53)).toBe('<A$0.01')
+  expect(fmtMoney(1.5, 'EUR', 0.92)).toBe('€1.38')
+  expect(fmtMoney(0.42, 'JPY', 152)).toBe('¥64')
+  expect(asCurrency('eur')).toBe('EUR')
+  expect(asCurrency('XYZ')).toBe('AUD')
+})
+
+test('card: LAST PROMPT carries the rough cost beside the tokens', () => {
+  const svg = hudSvg(bars(week(20, 5), null, NOW), { tokens: { total: 48210, input: 1, output: 1, cacheRead: 1, cacheWrite: 1, usd: 0.27 }, cost: 'A$0.41' })
+  expect(svg).toMatch(/LAST PROMPT <tspan[^>]*>48k<\/tspan> · <tspan[^>]*>~A\$0\.41<\/tspan>/)
+})
+
+// ---- AI usage history and settings ----
+
+test('usage: the last days fill in zeros, and add up', () => {
+  const now = Date.parse('2026-11-25T10:00:00')
+  const history = { [dayKey(now)]: { tokens: 1000, usd: 0.5, prompts: 2 }, [dayKey(now - 2 * 864e5)]: { tokens: 500, usd: 0.25, prompts: 1 } }
+  const days = lastDays(history, 7, now)
+  expect(days.map(d => d.tokens)).toEqual([0, 0, 0, 0, 500, 0, 1000])
+  expect(sumDays(days)).toEqual({ tokens: 1500, usd: 0.75, prompts: 3 })
+})
+
+const PANE_PROPS = { title: 'villager-hp', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} } as const
+
+for (const surface of ['desktop', 'terminal'] as const) {
+  test(`${surface}: /hp usage opens the AI usage tab with today, 7 and 30 days`, async ($, on) => {
+    memoryStore(on)
+    on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+    const ui = await $.ui.mount({ plugin: 'villager-hp', surface, component: 'Pane', requestId: 'villager-open', props: PANE_PROPS })
+    await $.command.run({ ...hp('usage') })
+
+    expect(await ui.find({ type: 'Text', text: 'TODAY' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'LAST 30 DAYS' })).toBeDefined()
+    if (surface === 'desktop') expect(String((await ui.find({ type: 'Svg' }))?.props.alt)).toMatch(/Tokens per day/)
+  })
+}
+
+test('settings: the currency picker shows the chosen currency', { options: { currency: 'EUR' } }, async ($, on) => {
+  memoryStore(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('fs.read', () => ({ value: JSON.stringify({ version: '2.11.0' }) }) as never)
+  const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'Pane', requestId: 'villager-open', props: PANE_PROPS })
+  await $.command.run({ ...hp('settings') })
+
+  expect((await ui.find({ type: 'Select', key: 'currency' }))?.props.value).toBe('EUR')
+  expect(await ui.find({ type: 'Text', text: 'Version 2.11.0' })).toBeDefined()
 })

@@ -107,15 +107,14 @@ export const paceZone = (pace: Pace | null): PaceZone =>
 export const pacePosition = (pace: Pace | null) =>
   pace === null ? 0.5 : Math.min(1, Math.max(0, 0.5 + (100 - pace.projected) / 200))
 
-// The pace in a few words: "22% spare", "on track", "cap Thu 3pm".
+// The pace in a few words: "22% spare", "on track", or nothing when over:
+// the red marker and the percentage already say how far over.
 export const paceShort = (pace: Pace | null) => {
   const zone = paceZone(pace)
   if (pace === null || zone === 'unknown') return 'too early'
   if (zone === 'track') return 'on track'
   if (zone === 'plenty') return `${100 - pace.projected}% spare`
-  // To the hour, so it fits its chip: "cap Wed 8am", "cap in 23h".
-  const when = pace.runsOut.replace(/:\d\d(?=[ap]m)/, '').replace(/ \d+m$/, '')
-  return when ? (/^\d/.test(when) ? `cap in ${when}` : `cap ${when}`) : 'over pace'
+  return ''
 }
 
 // 950, 12.4k, 1.25M
@@ -318,34 +317,6 @@ const avatar = (m: Mood, low: number | null) => {
   <circle cx="${AV.cx}" cy="${AV.cy}" r="${AV.r}" fill="none" stroke="${ring}" stroke-width="2.5">${pulse}</circle>`
 }
 
-// Over pace for the week: an hourglass floats at his shoulder, its sand
-// running out and the glass turning over. Drawn over the avatar's ring, so
-// the villager himself stays as his health has him.
-const PACE = { cx: 58, cy: 10.5, r: 8 }
-const paceBadge = () => {
-  const sand = T.amber[1]
-  const glass = '#f1e3c0'
-  const turn = `dur="3s" repeatCount="indefinite"`
-  return `<g>
-    <animateTransform attributeName="transform" type="translate" values="0 0;0 -1.2;0 0" dur="2.2s" repeatCount="indefinite"/>
-    <circle cx="${PACE.cx}" cy="${PACE.cy}" r="${PACE.r}" fill="#1a1410" stroke="${T.amber[0]}" stroke-width="1.4" filter="url(#soft)"/>
-    <g transform="translate(${PACE.cx} ${PACE.cy}) scale(1.15)"><g>
-      <animateTransform attributeName="transform" type="rotate" values="0;0;180" keyTimes="0;0.8;1" ${turn}/>
-      <path d="M -2.6,-3.6 L 2.6,-3.6 L 0.5,0 L 2.6,3.6 L -2.6,3.6 L -0.5,0 Z" fill="#2a2118" stroke="${glass}" stroke-width="0.8" stroke-linejoin="round"/>
-      <path d="M -3.2,-3.9 L 3.2,-3.9 M -3.2,3.9 L 3.2,3.9" stroke="${glass}" stroke-width="1.1" stroke-linecap="round"/>
-      <path d="M -1.7,-2.9 L 1.7,-2.9 L 0,0 Z" fill="${sand}">
-        <animateTransform attributeName="transform" type="scale" values="1;0.15;0.15" keyTimes="0;0.8;1" ${turn}/>
-      </path>
-      <line x1="0" y1="0" x2="0" y2="3.2" stroke="${sand}" stroke-width="0.5">
-        <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.75;0.8;1" ${turn}/>
-      </line>
-      <g transform="translate(0 3.2)"><path d="M -2,0 L 2,0 L 0,-2.2 Z" fill="${sand}">
-        <animateTransform attributeName="transform" type="scale" values="1 0.1;1 1;1 1" keyTimes="0;0.8;1" ${turn}/>
-      </path></g>
-    </g></g>
-  </g>`
-}
-
 // ---- the bars ----
 
 // A heart that beats, faster the lower the health.
@@ -534,7 +505,7 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
   const chipText = paceShort(pace)
   const chipX = VALUE_X + 66
   const CHIP_W = 78
-  const chip = `<rect x="${chipX}" y="${cy - 10}" width="${CHIP_W}" height="20" rx="10" fill="${T.chip}" stroke="${zone === 'cap' ? T.red[0] : T.trackEdge}" stroke-opacity="${zone === 'cap' ? 0.7 : 1}"/>
+  const chip = chipText === '' ? '' : `<rect x="${chipX}" y="${cy - 10}" width="${CHIP_W}" height="20" rx="10" fill="${T.chip}" stroke="${zone === 'cap' ? T.red[0] : T.trackEdge}" stroke-opacity="${zone === 'cap' ? 0.7 : 1}"/>
      <text x="${chipX + CHIP_W / 2}" y="${cy + 4.5}" text-anchor="middle" ${UI} font-size="${chipText.length > 9 ? 11 : 12.5}" font-weight="500" fill="${zone === 'cap' ? '#fca5a5' : T.muted}">${chipText}</text>`
   return icon + label + track + ends + reach + centre + marker + value + chip
 }
@@ -542,8 +513,8 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
 // The right of the card is kept for the OPEN button. The surface draws the
 // real button over this slot (register.tsx places it by openSlot's percents);
 // the card itself draws only the last prompt's tokens under it.
-const OPEN_W = 115.2 // 12% of the card, so the overlay lands on it exactly
-const OPEN_RIGHT = 19.2 // 2%
+const OPEN_W = 144 // 15% of the card, so the overlay lands on it exactly
+const OPEN_RIGHT = 28.8 // 3%: clear of the card's corner brackets
 const OPEN_X = 960 - OPEN_RIGHT - OPEN_W
 const TOKENS_ROOM = 16 // card units under the button for the tokens line
 
@@ -558,10 +529,25 @@ export const openSlot = (rows: number) => {
   return { margin: pct(OPEN_RIGHT), width: pct(OPEN_W), pad: vpct(HUD_PAD_TOP), height: vpct(h - TOKENS_ROOM) }
 }
 
-const tokenReadout = (tokens: PromptTokens | null) =>
+// A glowing socket the OPEN button sits in: a dark inset whose cyan edge
+// breathes, filling the slot the button is laid over.
+const openSocket = () => {
+  const y = 7
+  const h = HUD_H - TOKENS_ROOM - 9
+  return `<g>
+    <rect x="${OPEN_X}" y="${y}" width="${OPEN_W}" height="${h}" rx="12" fill="#0d1117" fill-opacity="0.85" stroke="${HUD_CYAN}" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="${OPEN_X}" y="${y}" width="${OPEN_W}" height="${h}" rx="12" fill="none" stroke="${HUD_CYAN}" stroke-width="2" filter="url(#soft)" opacity="0.2">
+      <animate attributeName="opacity" values="0.1;0.4;0.1" dur="3.2s" repeatCount="indefinite"/>
+    </rect>
+  </g>`
+}
+
+// Under the socket: the last prompt's tokens and, where known, its rough cost
+// at API rates ("LAST PROMPT 48k · ~A$0.42"), its right edge on the socket's.
+const tokenReadout = (tokens: PromptTokens | null, cost: string | null) =>
   tokens === null
     ? ''
-    : `<text x="${OPEN_X + OPEN_W / 2}" y="${HUD_H - 6}" text-anchor="middle" ${UI} font-size="10" font-weight="600" letter-spacing="0.6" fill="${T.muted}">LAST PROMPT <tspan fill="${T.text}" font-weight="700">${fmtTokens(tokens.total)}</tspan></text>`
+    : `<text x="${OPEN_X + OPEN_W}" y="${HUD_H - 6}" text-anchor="end" ${UI} font-size="9.5" font-weight="600" letter-spacing="0.4" fill="${T.muted}">LAST PROMPT <tspan fill="${T.text}" font-weight="700">${fmtTokens(tokens.total)}</tspan>${cost ? ` · <tspan fill="#86efac" font-weight="700">~${cost}</tspan>` : ''}</text>`
 
 const gradient = (id: string, hp: number | null) => {
   const [a, b] = T[tone(hp ?? 100)]
@@ -584,9 +570,9 @@ const aurora = (colour: string) => `
 // What the card adds beyond the bars: the weekly pace bar under WEEKLY
 // (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
 // the last prompt's tokens.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean; tokens?: PromptTokens | null }
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; tokens?: PromptTokens | null; cost?: string | null }
 
-export const hudSvg = (all: Bar[], isOverPace = false, extra: HudExtra = {}) => {
+export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   BAR_W = 960 - OPEN_RIGHT - OPEN_W - BADGE_GAP - 78 - 66 - 16 - BAR_X
   VALUE_X = BAR_X + BAR_W + 16
   const m = mood(all)
@@ -644,9 +630,10 @@ export const hudSvg = (all: Bar[], isOverPace = false, extra: HudExtra = {}) => 
   <rect x="0.5" y="0.5" width="${HUD_W - 1}" height="${HUD_H - 1}" rx="14" fill="url(#cardglow)"/>
   <line x1="14" y1="1.5" x2="${HUD_W - 14}" y2="1.5" stroke="#ffffff" stroke-opacity="0.06"/>
   ${hologram()}
-  ${mid(radar(m) + avatar(m, low) + (isOverPace && m !== 'dead' ? paceBadge() : ''))}
+  ${mid(radar(m) + avatar(m, low))}
   ${rows}
-  ${tokenReadout(extra.tokens ?? null)}
+  ${openSocket()}
+  ${tokenReadout(extra.tokens ?? null, extra.cost ?? null)}
   ${cornerBrackets()}
   ${deathScreen}
   </g>

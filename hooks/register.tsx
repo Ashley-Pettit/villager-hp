@@ -1,10 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { LibItem, LibKind, Limit, Plan, PromptTokens } from '../types'
+import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } from '../types'
 import { backIn, bars, emptyTokens, fmtTokens, hudSvg, isUltra, killer, mood, openSlot, outBy, paceShort, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
+import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
+import { addUse, lastDays, readHistory, sumDays, usageChart } from './usage'
 import { dailyCheck, installedVersion, isAutoUpdate, isNewer, latestVersion, runUpdate } from './update'
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
@@ -17,18 +19,31 @@ const libraryLoadingAtom = atom({ plugin: 'villager-hp', key: 'libraryLoading' }
 const pinsAtom = atom({ plugin: 'villager-hp', key: 'pins' } as const, [] as string[])
 type Tab = LibKind | 'all'
 const tabAtom = atom({ plugin: 'villager-hp', key: 'libraryTab' } as const, 'all' as Tab)
+const queryAtom = atom({ plugin: 'villager-hp', key: 'libraryQuery' } as const, '')
 const PANE = 'villager-open'
 const TABS: readonly [Tab, string][] = [['all', 'All'], ['artifact', 'Artifacts'], ['doc', 'Docs'], ['video', 'Videos']]
-const KIND_ICON: Record<LibKind, string> = { artifact: '◆', doc: '▤', video: '▶' }
+// Each kind's chip: its glyph, colour, a dark tint behind it, and its name.
+const KIND_LOOK: Record<LibKind, { icon: string; color: string; tint: string; name: string }> = {
+  artifact: { icon: '◆', color: '#5ec4ff', tint: '#10283a', name: 'Artifact' },
+  doc: { icon: '▤', color: '#7aa7ff', tint: '#141f3d', name: 'Doc' },
+  video: { icon: '▶', color: '#f59e0b', tint: '#33230a', name: 'Video' },
+}
 const planAtom = atom({ plugin: 'villager-hp', key: 'plan' } as const, 'auto' as Plan)
 const accountPlanAtom = atom({ plugin: 'villager-hp', key: 'accountPlan' } as const, null as string | null)
 const lastPromptAtom = atom({ plugin: 'villager-hp', key: 'lastPrompt' } as const, null as PromptTokens | null)
+const costAtSendAtom = atom({ plugin: 'villager-hp', key: 'costAtSend' } as const, null as number | null)
+const fxRateAtom = atom({ plugin: 'villager-hp', key: 'fxRate' } as const, 1.53)
+const paneTabAtom = atom({ plugin: 'villager-hp', key: 'paneTab' } as const, 'library' as PaneTab)
+const historyAtom = atom({ plugin: 'villager-hp', key: 'history' } as const, {} as Record<string, DayUse>)
+const lastCostSeenAtom = atom({ plugin: 'villager-hp', key: 'lastCostSeen' } as const, null as number | null)
+const autoUpdateAtom = atom({ plugin: 'villager-hp', key: 'autoUpdate' } as const, true)
+const PANE_TABS: readonly [PaneTab, string][] = [['library', '⊞ Library'], ['usage', '▤ AI usage'], ['settings', '⚙ Settings']]
 const PLANS: readonly Plan[] = ['auto', 'ultra', 'standard']
 
 const FACES = { healthy: '(◕‿◕)', hurt: '(•_•)', critical: '(╥﹏╥)', dead: '(x_x)', unknown: '(•‿•)' }
 const SEGMENTS = 20
 // Named by /hp, to tell at a glance which version is loaded.
-const VERSION = '2.10: /hp update, and a daily update check'
+const VERSION = '2.11: a nicer OPEN button and library pane, with search'
 // AoE-style: green for what's left, red for what's gone.
 const split = (hp: number) => {
   const full = Math.round((hp / 100) * SEGMENTS)
@@ -43,10 +58,10 @@ const paceLine = (pace: Pace | null) =>
       ? `Weekly pace: over. At this rate you're ${outBy(pace.runsOut)}, before the week resets (about ${pace.projected}% of the limit by then).`
       : `Weekly pace: on track. At this rate about ${pace.projected}% of the limit is used by the reset.`
 
-const tokensLine = (t: PromptTokens | null) =>
+const tokensLine = (t: PromptTokens | null, cost: string | null) =>
   t === null
     ? 'Last prompt: no tokens counted yet.'
-    : `Last prompt: ${t.total.toLocaleString()} tokens (${fmtTokens(t.input)} in, ${fmtTokens(t.output)} out, ${fmtTokens(t.cacheRead)} cache read, ${fmtTokens(t.cacheWrite)} cache write).`
+    : `Last prompt: ${t.total.toLocaleString()} tokens (${fmtTokens(t.input)} in, ${fmtTokens(t.output)} out, ${fmtTokens(t.cacheRead)} cache read, ${fmtTokens(t.cacheWrite)} cache write)${cost ? `, about ${cost} at API rates` : ''}.`
 
 // The pace bar in text, for the terminal: cap ├────┼──●───┤ spare
 const PACE_CELLS = 21
@@ -70,9 +85,16 @@ const refreshLibrary = async ($: EngineInterface) => {
   }
 }
 
-const openPane = async ($: EngineInterface) => {
-  await $.ui.open({ id: PANE, title: 'Open', focus: true, closeOnEscape: true })
-  void refreshLibrary($)
+const openPane = async ($: EngineInterface, tab: PaneTab = 'library') => {
+  await update($, paneTabAtom, () => tab)
+  await $.ui.open({ id: PANE, title: 'villager-hp', focus: true, closeOnEscape: true })
+  if (tab === 'library') void refreshLibrary($)
+}
+
+// Adds to today's line in the AI usage history and redraws the tab.
+const recordUse = async ($: EngineInterface, add: Partial<DayUse>) => {
+  const history = await addUse($, add)
+  await update($, historyAtom, () => history)
 }
 
 const togglePin = async ($: EngineInterface, id: string) => {
@@ -85,13 +107,17 @@ const togglePin = async ($: EngineInterface, id: string) => {
 // Whether the card draws for Ultra, read once per call.
 const ultraNow = async ($: EngineInterface) => isUltra(await read($, planAtom), await read($, accountPlanAtom), await read($, limitsAtom))
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // The currency for the last prompt's cost: Settings → the villager-hp row (userConfig), AUD by default.
+  const currency = asCurrency(options.currency)
+  const money = (t: PromptTokens | null, rate: number) => (t?.usd === undefined ? null : fmtMoney(t.usd, currency, rate))
+
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await $.command.register({
       name: 'hp',
-      description: "Show Claude's HP, preview a level (/hp 10, /hp 0 to die, /hp off), or /hp update, /hp autoupdate on|off",
-      argumentHint: '[0-100 | off | update | autoupdate on|off]',
+      description: "Show Claude's HP, preview a level (/hp 10, /hp 0 to die, /hp off), /hp usage for your AI usage history, /hp settings, /hp update",
+      argumentHint: '[0-100 | off | usage | settings | update | autoupdate on|off]',
     })
     await $.command.register({ name: 'die', description: 'Watch Claude die on the health card (same as /hp 0); /revive to undo' })
     await $.command.register({ name: 'revive', description: 'Bring Claude back to your real health (same as /hp off)' })
@@ -119,7 +145,15 @@ export const register: Register = on => {
     if (Array.isArray(pins)) await update($, pinsAtom, () => pins.filter((p): p is string => typeof p === 'string'))
     const usage = await $.session.usage()
     await update($, limitsAtom, () => usage.rateLimits)
+    await update($, lastCostSeenAtom, () => usage.cost?.usd ?? null)
+    const history = await readHistory($)
+    await update($, historyAtom, () => history)
+    const autoUpdate = await isAutoUpdate($)
+    await update($, autoUpdateAtom, () => autoUpdate)
     await update($, nowAtom, () => Date.now())
+    // Today's exchange rate for the cost readout, in the background.
+    await update($, fxRateAtom, () => fallbackRate(currency))
+    void rateFor($, currency).then(r => update($, fxRateAtom, () => r)).catch(() => undefined)
     // Once a day, see whether a newer villager-hp is out (and install it, unless
     // auto update is off). In the background: it never holds up the session.
     void dailyCheck($).catch(() => undefined)
@@ -145,56 +179,228 @@ export const register: Register = on => {
     return { text: 'Opened your artifacts, docs and videos.' }
   })
 
-  // The Open pane: tabs, pinned things, then the rest, most recently edited first.
+  // The pane: three tabs. Library: a search box, kind tabs with counts, then
+  // cards, pinned first and the rest grouped Today, This week, Earlier. AI usage:
+  // tokens and rough cost per day. Settings: currency, Ultra layout, updates.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Button, Link, Input, Select } = elements
+    // The terminal draws no Svg: it gets the chart as text bars.
+    const Svg = 'Svg' in elements ? elements.Svg : undefined
+    const paneTab = await read($, paneTabAtom)
+    const isTerminalPane = e.surface === 'terminal'
+    const tabBar = (
+      <Box flexDirection="row" gap={1} flexWrap="wrap">
+        {...PANE_TABS.map(([id, label]) => (
+          <Button key={`pane:${id}`} label={label} variant={paneTab === id ? 'primary' : 'secondary'} onPress={() => openPane($, id)} />
+        ))}
+      </Box>
+    )
+    const frame = (...body: ReturnType<typeof Box>[]) => (
+      <Box flexDirection="column" gap={1} paddingX={isTerminalPane ? 0 : 1}>
+        {tabBar}
+        {...body}
+      </Box>
+    )
+    const rate = await read($, fxRateAtom)
+
+    if (paneTab === 'usage') {
+      const history = await read($, historyAtom)
+      const nowMs = Date.now()
+      const days = lastDays(history, 14, nowMs)
+      const tile = (key: string, label: string, use: DayUse) => (
+        <Box key={key} flexDirection="column" flexGrow={1} paddingX={1} borderStyle={isTerminalPane ? undefined : 'round'} borderColor="#2b333d" backgroundColor={isTerminalPane ? undefined : '#151a21'}>
+          <Text size="caption" weight="bold" color="#8f9aa7">{label.toUpperCase()}</Text>
+          <Text size="heading" weight="bold">{`${fmtTokens(use.tokens)} tokens`}</Text>
+          <Text size="caption" dimColor>{`~${fmtMoney(use.usd, currency, rate)} · ${use.prompts} prompt${use.prompts === 1 ? '' : 's'}`}</Text>
+        </Box>
+      )
+      const max = Math.max(1, ...days.map(d => d.tokens))
+      const dayName = (day: string) => {
+        const d = new Date(`${day}T12:00:00`)
+        return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`
+      }
+      return frame(
+        <Box key="tiles" flexDirection="row" gap={1}>
+          {tile('today', 'Today', days[days.length - 1] ?? { tokens: 0, usd: 0, prompts: 0 })}
+          {tile('week', 'Last 7 days', sumDays(days.slice(-7)))}
+          {tile('month', 'Last 30 days', sumDays(lastDays(history, 30, nowMs)))}
+        </Box>,
+        isTerminalPane || Svg === undefined ? (
+          <Box key="chart" flexDirection="column">
+            {...days.map(d => (
+              <Box key={`bar:${d.day}`} flexDirection="row" gap={1}>
+                <Text dimColor>{dayName(d.day).padEnd(10)}</Text>
+                <Text color="#5ec4ff">{'█'.repeat(Math.round((d.tokens / max) * 24)) || '·'}</Text>
+                <Text>{` ${fmtTokens(d.tokens)}`}</Text>
+              </Box>
+            ))}
+          </Box>
+        ) : (
+          <Svg key="chart" source={usageChart(days, fmtTokens)} alt={`Tokens per day for the last 14 days; today ${fmtTokens(days[days.length - 1]?.tokens ?? 0)}`} />
+        ),
+        <Box key="days" flexDirection="column">
+          <Text size="caption" weight="bold" color="#8f9aa7">BY DAY</Text>
+          {...[...days].reverse().filter(d => d.tokens > 0 || d.prompts > 0).map(d => (
+            <Box key={`day:${d.day}`} flexDirection="row" justifyContent="space-between">
+              <Text>{dayName(d.day)}</Text>
+              <Text tabular>{`${fmtTokens(d.tokens)} tokens · ~${fmtMoney(d.usd, currency, rate)} · ${d.prompts} prompts`}</Text>
+            </Box>
+          ))}
+        </Box>,
+        <Text key="note" size="caption" dimColor>{`Rough: counted by villager-hp in every session since it was installed, cost at API rates in ${currency}. Kept for 90 days.`}</Text>,
+      )
+    }
+
+    if (paneTab === 'settings') {
+      const row = (key: string, label: string, help: string, control: ReturnType<typeof Box>) => (
+        <Box key={key} flexDirection="row" justifyContent="space-between" alignItems="center" gap={2} paddingX={1} borderStyle={isTerminalPane ? undefined : 'round'} borderColor="#2b333d" backgroundColor={isTerminalPane ? undefined : '#151a21'}>
+          <Box flexDirection="column" flexGrow={1}>
+            <Text weight="semibold">{label}</Text>
+            <Text size="caption" dimColor>{help}</Text>
+          </Box>
+          {control}
+        </Box>
+      )
+      const plan = await read($, planAtom)
+      const auto = await read($, autoUpdateAtom)
+      const version = await installedVersion($).catch(() => '?')
+      return frame(
+        row('currency', 'Currency', 'For the rough cost of your prompts, at API rates. Also in /config.',
+          <Select key="currency" value={currency} options={CURRENCIES.map(c => ({ value: c, label: c }))} onSelect={v => void $.config.set({ key: 'villager-hp.currency', value: v } as never)} />),
+        row('ultra', 'Ultra layout', 'Hide the 5-hour SESSION bar. Auto works it out from your limits.',
+          <Select key="plan" value={plan} options={[{ value: 'auto', label: 'Auto' }, { value: 'ultra', label: 'On' }, { value: 'standard', label: 'Off' }]} onSelect={v => {
+            void $.store.set('plan', v).catch(() => undefined)
+            void update($, planAtom, () => v as Plan)
+          }} />),
+        row('autoupdate', 'Auto update', 'Once a day, install a newer villager-hp by itself. Off: just tell me.',
+          <Select key="autoupdate" value={auto ? 'on' : 'off'} options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]} onSelect={v => {
+            void $.store.set('autoUpdate', v === 'on').catch(() => undefined)
+            void update($, autoUpdateAtom, () => v === 'on')
+          }} />),
+        row('version', `Version ${version}`, 'Restart Claude after an update to use it.',
+          <Button key="check" label="Check for updates" variant="secondary" onPress={async () => {
+            const latest = await latestVersion($).catch(() => null)
+            if (latest === null) return $.ui.toast("Couldn't reach GitHub to check.")
+            if (!isNewer(latest, version)) return $.ui.toast(`villager-hp ${version} is the latest.`)
+            const result = await runUpdate($)
+            $.ui.toast(result.ok ? `Updated to ${latest}. Restart Claude to use it.` : `Couldn't update: ${result.detail}`)
+          }} />),
+      )
+    }
+
     const items = await read($, libraryAtom)
     const pins = await read($, pinsAtom)
     const tab = await read($, tabAtom)
+    const query = (await read($, queryAtom)).trim().toLowerCase()
     const loading = await read($, libraryLoadingAtom)
-    const { pinned, rest } = ordered(items, pins, tab)
+    const isTerminal = e.surface === 'terminal'
     const now = Date.now()
-    const room = Math.max(6, (e.viewport?.rows ?? 30) - 8)
+    const matching = query === '' ? items : items.filter(i => `${i.title} ${i.detail}`.toLowerCase().includes(query))
+    const { pinned, rest } = ordered(matching, pins, tab)
+    const count = (kind: Tab) => (kind === 'all' ? matching.length : matching.filter(i => i.kind === kind).length)
+    // Cards take three rows each where they have a border; plain rows one.
+    const perItem = isTerminal ? 1 : 3
+    const room = Math.max(4, Math.floor(((e.viewport?.rows ?? 40) - (isTerminal ? 8 : 14)) / perItem))
     const shownRest = rest.slice(0, Math.max(0, room - pinned.length))
 
-    const row = (item: LibItem, isPinned: boolean) => (
-      <Box key={item.id} flexDirection="row" gap={1} alignItems="center">
-        <Button key={`pin:${item.id}`} label={isPinned ? '★' : '☆'} onPress={() => togglePin($, item.id)} />
-        <Text color={item.kind === 'artifact' ? '#5ec4ff' : item.kind === 'doc' ? '#7aa7ff' : '#f59e0b'}>{KIND_ICON[item.kind]}</Text>
-        {item.kind === 'artifact' || item.where.startsWith('https://') ? (
-          <Link href={item.where} label={item.title} />
-        ) : (
-          <Button key={`open:${item.id}`} label={item.title} onPress={() => openFile($, item.where)} />
-        )}
-        <Text dimColor>{`${item.detail} · ${age(item.modifiedMs, now)}`}</Text>
-      </Box>
-    )
+    const card = (item: LibItem, isPinned: boolean) => {
+      const look = KIND_LOOK[item.kind]
+      const title = item.kind === 'artifact' || item.where.startsWith('https://') ? (
+        <Link href={item.where} label={item.title} />
+      ) : (
+        <Button key={`open:${item.id}`} label={item.title} plain onPress={() => openFile($, item.where)}>
+          <Text weight="semibold">{item.title}</Text>
+        </Button>
+      )
+      const pin = (
+        <Button key={`pin:${item.id}`} label={isPinned ? 'Unpin' : 'Pin'} plain dimColor={!isPinned} hover={{ color: '#f7b733' }} onPress={() => togglePin($, item.id)}>
+          <Text color={isPinned ? '#f7b733' : undefined}>{isPinned ? '★' : '☆'}</Text>
+        </Button>
+      )
+      if (isTerminal)
+        return (
+          <Box key={`card:${item.id}`} flexDirection="row" gap={1}>
+            {pin}
+            <Text color={look.color}>{look.icon}</Text>
+            {title}
+            <Text dimColor>{`${item.detail} · ${age(item.modifiedMs, now)}`}</Text>
+          </Box>
+        )
+      return (
+        <Box
+          key={`card:${item.id}`}
+          flexDirection="row"
+          alignItems="center"
+          gap={1}
+          paddingX={1}
+          borderStyle="round"
+          borderColor={isPinned ? '#5a4517' : '#2b333d'}
+          backgroundColor={isPinned ? '#1d1a12' : '#151a21'}
+          hover={{ borderColor: look.color, backgroundColor: '#1c232d' }}
+        >
+          <Text color={look.color} backgroundColor={look.tint} bold>{` ${look.icon} `}</Text>
+          <Box flexDirection="column" flexGrow={1}>
+            {title}
+            <Text size="caption" dimColor wrap="truncate-end">{`${look.name} · ${item.detail} · ${age(item.modifiedMs, now)}`}</Text>
+          </Box>
+          {pin}
+        </Box>
+      )
+    }
+
+    const section = (heading: string, list: readonly LibItem[], isPinned: boolean, color: string) =>
+      list.length === 0 ? (
+        <></>
+      ) : (
+        <Box key={`section:${heading}`} flexDirection="column" gap={isTerminal ? 0 : 1}>
+          <Text size="caption" weight="bold" color={color}>{heading.toUpperCase()}</Text>
+          {...list.map(item => card(item, isPinned))}
+        </Box>
+      )
+    const DAY_MS = 24 * 60 * 60 * 1000
+    const today = shownRest.filter(i => now - i.modifiedMs < DAY_MS)
+    const week = shownRest.filter(i => now - i.modifiedMs >= DAY_MS && now - i.modifiedMs < 7 * DAY_MS)
+    const earlier = shownRest.filter(i => now - i.modifiedMs >= 7 * DAY_MS)
+    const isEmpty = pinned.length === 0 && shownRest.length === 0
 
     return (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={1}>
-          {TABS.map(([id, label]) => (
-            <Button key={`tab:${id}`} label={label} variant={tab === id ? 'primary' : 'secondary'} onPress={() => update($, tabAtom, () => id)} />
-          ))}
-          <Button key="refresh" label={loading ? 'Refreshing…' : 'Refresh'} onPress={() => refreshLibrary($)} />
-        </Box>
-        {pinned.length > 0 ? (
+      <Box flexDirection="column" gap={1} paddingX={isTerminal ? 0 : 1}>
+        {tabBar}
+        <Box flexDirection="row" justifyContent="space-between" alignItems="center">
           <Box flexDirection="column">
-            <Text bold color="#f7b733">Pinned</Text>
-            {pinned.map(item => row(item, true))}
+            <Text size="caption" dimColor>
+              {loading && items.length === 0 ? 'Looking for your artifacts, docs and videos…' : `${items.length} items · ${pins.length} pinned · newest first`}
+            </Text>
+          </Box>
+          <Button key="refresh" label="Refresh" variant="secondary" onPress={() => refreshLibrary($)}>
+            {loading ? '↻ Refreshing…' : '↻ Refresh'}
+          </Button>
+        </Box>
+        <Input key="search" placeholder="Search by name or folder" value={query} onInput={v => void update($, queryAtom, () => v)} onSubmit={v => void update($, queryAtom, () => v)} />
+        <Box flexDirection="row" gap={1} flexWrap="wrap">
+          {...TABS.map(([id, label]) => (
+            <Button key={`tab:${id}`} label={label} variant={tab === id ? 'primary' : 'secondary'} onPress={() => update($, tabAtom, () => id)}>
+              <Text weight={tab === id ? 'semibold' : 'regular'}>{label}</Text>
+              <Text dimColor>{` ${count(id)}`}</Text>
+            </Button>
+          ))}
+        </Box>
+        {isEmpty ? (
+          <Box flexDirection="column" paddingY={1} alignItems="center">
+            <Text dimColor>
+              {loading ? 'Looking…' : query !== '' ? `Nothing matches "${query}".` : 'Nothing here yet. Press Refresh to look again.'}
+            </Text>
           </Box>
         ) : (
-          <></>
+          <Box flexDirection="column" gap={1}>
+            {section('★ Pinned', pinned, true, '#f7b733')}
+            {section('Today', today, false, '#8f9aa7')}
+            {section('This week', week, false, '#8f9aa7')}
+            {section('Earlier', earlier, false, '#8f9aa7')}
+            {rest.length > shownRest.length ? <Text size="caption" dimColor>{`…and ${rest.length - shownRest.length} more. Search or pick a tab to narrow it.`}</Text> : <></>}
+          </Box>
         )}
-        <Box flexDirection="column">
-          <Text bold color="#8f9aa7">Recent</Text>
-          {shownRest.length === 0 ? (
-            <Text dimColor>{loading ? 'Looking for your artifacts, docs and videos…' : pinned.length > 0 ? 'Nothing else here.' : 'Nothing found yet. Press Refresh.'}</Text>
-          ) : (
-            <>{shownRest.map(item => row(item, false))}</>
-          )}
-          {rest.length > shownRest.length ? <Text dimColor>{`…and ${rest.length - shownRest.length} more. Pick a tab to narrow it.`}</Text> : <></>}
-        </Box>
       </Box>
     )
   })
@@ -231,12 +437,16 @@ export const register: Register = on => {
     const result = await next(e)
     // Never hold up your prompt over a counter.
     await update($, lastPromptAtom, () => emptyTokens()).catch(() => undefined)
+    const usd = (await $.session.usage().catch(() => null))?.cost?.usd
+    await update($, costAtSendAtom, () => usd ?? null).catch(() => undefined)
+    await recordUse($, { prompts: 1 }).catch(() => undefined)
     return result
   })
 
   on('turn.complete', async ($, e, next) => {
     const u = e.usage
     if (u !== undefined) {
+      await recordUse($, { tokens: u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens }).catch(() => undefined)
       await update($, lastPromptAtom, prev => {
         const t = prev ?? emptyTokens()
         const input = t.input + u.input_tokens
@@ -252,12 +462,25 @@ export const register: Register = on => {
   // Fresh readings arrive after each turn and whenever a window moves a point.
   on('session.measure', async ($, e, next) => {
     await update($, limitsAtom, () => e.rateLimits)
+    const sent = await read($, costAtSendAtom)
+    const usd = e.cost?.usd
+    const seen = await read($, lastCostSeenAtom)
+    if (usd !== undefined) {
+      if (seen !== null && usd > seen) await recordUse($, { usd: usd - seen }).catch(() => undefined)
+      await update($, lastCostSeenAtom, () => usd)
+    }
+    if (sent !== null && usd !== undefined)
+      await update($, lastPromptAtom, t => (t === null ? t : { ...t, usd: Math.max(0, usd - sent) }))
     await update($, nowAtom, () => Date.now())
     return next(e)
   })
 
   on('command.run', { command: 'hp' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
+    if (arg === 'usage' || arg === 'settings') {
+      await openPane($, arg)
+      return { text: arg === 'usage' ? 'Opened your AI usage history.' : 'Opened villager-hp settings.' }
+    }
     if (arg === 'update' || arg === 'version') {
       const mine = await installedVersion($).catch(() => 'unknown')
       let latest: string
@@ -277,7 +500,10 @@ export const register: Register = on => {
     }
     if (arg.startsWith('autoupdate')) {
       const want = arg.split(/\s+/)[1]
-      if (want === 'on' || want === 'off') await $.store.set('autoUpdate', want === 'on').catch(() => undefined)
+      if (want === 'on' || want === 'off') {
+        await $.store.set('autoUpdate', want === 'on').catch(() => undefined)
+        await update($, autoUpdateAtom, () => want === 'on')
+      }
       else if (want !== undefined) return { text: 'Use /hp autoupdate on or /hp autoupdate off.' }
       return {
         text: (await isAutoUpdate($))
@@ -301,7 +527,7 @@ export const register: Register = on => {
       text: [
         ...all.map(b => `${b.label}: ${b.hp === null ? 'no reading yet' : `${b.hp}/100 HP${b.respawn ? `, resets in ${b.respawn}` : ''}`}`),
         paceLine(weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), Date.now())),
-        tokensLine(await read($, lastPromptAtom)),
+        tokensLine(await read($, lastPromptAtom), money(await read($, lastPromptAtom), await read($, fxRateAtom))),
         `(villager-hp ${VERSION}${ultra ? ', Ultra layout' : ''})`,
       ].join('\n'),
     }
@@ -318,35 +544,37 @@ export const register: Register = on => {
     const m = mood(all)
     const pace = weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), now)
     const tokens = await read($, lastPromptAtom)
-    // Set while the week is on course to run out, and he is still standing.
-    const over = pace !== null && pace.isOver && m !== 'dead' ? pace : null
+    const cost = money(tokens, await read($, fxRateAtom))
     const elements = $.ui.resolve(e)
 
     // The animated card everywhere but the terminal, which gets the text bars.
     // Chosen by the surface, not by which elements the table lists: a table can
     // carry an element its surface draws as nothing.
     if (e.surface !== 'terminal' && 'Svg' in elements) {
-      const { Box, Svg, Button } = elements
+      const { Box, Svg, Button, Text } = elements
       const slot = openSlot(all.length + (pace !== undefined ? 1 : 0))
       const alt =
         all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
-        (ultra ? `, weekly pace ${paceShort(pace)}` : over !== null ? `, on course to be ${outBy(over.runsOut)}` : '') +
-        (tokens !== null ? `, last prompt ${fmtTokens(tokens.total)} tokens` : '')
+        (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`) +
+        (tokens !== null ? `, last prompt ${fmtTokens(tokens.total)} tokens${cost ? `, about ${cost} at API rates` : ''}` : '')
       // The card, with the real OPEN button laid over the slot it leaves at the right.
       return (
         <Box flexDirection="column">
           {below}
           <Box position="relative">
             <Svg
-              key={`hp-${m}-${over !== null}-${paceZone(pace)}-${ultra}`}
-              source={hudSvg(all, over !== null, { pace, hideSession: ultra, tokens })}
+              key={`hp-${m}-${paceZone(pace)}-${ultra}`}
+              source={hudSvg(all, { pace, hideSession: ultra, tokens, cost })}
               alt={`Claude's health: ${alt}`}
             />
             <Box position="absolute" top={0} left={0} width="100%" height="100%" flexDirection="row" justifyContent="flex-end">
               <Box flexDirection="column" width={slot.width}>
                 <Box height={slot.pad} />
                 <Box height={slot.height} justifyContent="center" alignItems="center">
-                  <Button key="open" label="OPEN" variant="primary" onPress={() => openPane($)} />
+                  <Button key="open" label="OPEN" variant="primary" onPress={() => openPane($)}>
+                    <Text color="#5ec4ff">⊞</Text>
+                    <Text weight="semibold">{' Open'}</Text>
+                  </Button>
                 </Box>
               </Box>
               <Box width={slot.margin} />
@@ -379,7 +607,6 @@ export const register: Register = on => {
                     <Text color="#a01d14">{split(b.hp).red}</Text>
                     <Text color="#f1e3c0" bold>{` ${b.hp}/100`}</Text>
                     <Text color="#cdbb94">{b.respawn ? `  ${b.respawn}` : ''}</Text>
-                    {over !== null && b.label === 'WEEKLY' && !ultra ? <Text color="#f59e0b">{`  ⏳ ${outBy(over.runsOut)}`}</Text> : <></>}
                   </>
                 )}
               </Box>
@@ -405,6 +632,7 @@ export const register: Register = on => {
                 <Text bold color="#d4ab52">{'PROMPT'.padEnd(8)}</Text>
                 <Text color="#f1e3c0" bold>{`${fmtTokens(tokens.total)} tokens`}</Text>
                 <Text color="#cdbb94">{`  ${fmtTokens(tokens.output)} out · ${fmtTokens(tokens.input + tokens.cacheRead + tokens.cacheWrite)} in`}</Text>
+                <Text color="#86efac">{cost ? `  ~${cost} at API rates` : ''}</Text>
               </Box>
             ) : (
               <></>

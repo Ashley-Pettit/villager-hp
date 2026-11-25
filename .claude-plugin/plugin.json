@@ -1,11 +1,44 @@
 {
   "name": "villager-hp",
-  "version": "2.10.0",
-  "description": "Your Claude session and weekly usage limits as an animated villager health card, with a weekly pace hourglass, rank badges and a death screen at 0 HP",
-  "author": { "name": "Ash", "url": "https://github.com/Ashley-Pettit" },
+  "version": "2.11.0",
+  "description": "Your Claude usage limits as an animated villager health card: session and weekly HP, a weekly pace bar, your last prompt's tokens and rough cost, and an OPEN button for your artifacts, docs and videos",
+  "author": {
+    "name": "Ash",
+    "url": "https://github.com/Ashley-Pettit"
+  },
   "homepage": "https://github.com/Ashley-Pettit/villager-hp#readme",
   "repository": "https://github.com/Ashley-Pettit/villager-hp",
   "license": "MIT",
-  "keywords": ["mod", "usage", "usage-limits", "rate-limits", "weekly-limit", "pace", "health-bar", "status", "game", "hud"],
-  "types": "./types/index.d.ts"
+  "keywords": [
+    "mod",
+    "usage",
+    "usage-limits",
+    "rate-limits",
+    "weekly-limit",
+    "pace",
+    "health-bar",
+    "status",
+    "game",
+    "hud"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "description": "The currency the last prompt's rough cost (at API rates) is shown in.",
+      "default": "AUD",
+      "options": [
+        "AUD",
+        "USD",
+        "EUR",
+        "GBP",
+        "NZD",
+        "CAD",
+        "JPY",
+        "INR",
+        "SGD"
+      ]
+    }
+  }
 }

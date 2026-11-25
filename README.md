@@ -57,7 +57,7 @@ Three bars: **SESSION** (your 5-hour limit) and **WEEKLY** (your weekly limit ac
 
 - The middle line is on track: at this rate you use exactly your weekly limit by the reset.
 - The marker sits **right** of the middle when you have plenty spare, and **left** when you'll hit the cap before the reset.
-- Beside it: the percent of the limit you'd use by the reset, and "42% spare", "on track" or "cap Wed 8am".
+- Beside it: the percent of the limit you'd use by the reset, and "42% spare", "on track" or "over pace".
 
 ## Ultra accounts
 
@@ -72,12 +72,20 @@ The **OPEN** button at the right of the card (or `/open`) opens a pane listing y
 - Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
 - An artifact opens in your browser; a doc or video opens in its own app.
 
-Under the OPEN button, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included. `/hp` gives the breakdown.
+Under the OPEN button, **LAST PROMPT** shows the tokens your most recent prompt used, counting every model turn it ran, subagents included, and its rough cost at API rates (`~A$0.42`). The cost is Claude Code's own estimate (what `/cost` shows), converted at a daily exchange rate; on a subscription you aren't billed it. `/hp` gives the breakdown.
+
+## AI usage and settings
+
+The pane the OPEN button opens has three tabs:
+
+- **Library:** your artifacts, docs and videos (above).
+- **AI usage:** tokens, rough cost and prompts today, over 7 days and over 30 days, a 14-day chart, and a day-by-day list. It counts every session from when 2.11 was installed and keeps 90 days. `/hp usage` opens it.
+- **Settings:** the currency for costs (AUD by default; also a row in `/config`), the Ultra layout, auto update, and a Check for updates button. `/hp settings` opens it.
 
 ## What it does
 
 - **Live HP.** Readings refresh after every turn and whenever a limit moves by a point. Reset times count down each minute.
-- **Weekly pace.** The card works out whether your weekly limit will last until it resets if you keep going at the same rate. If it won't, an hourglass floats at the villager's shoulder with its sand running out, and `/pace` tells you when you'd run out. It makes no call in a week's first 12 hours, when one busy sitting would look like a blown week.
+- **Weekly pace.** The PACE bar works out whether your weekly limit will last until it resets if you keep going at the same rate. If it won't, the bar's marker sits left of the middle in red, with the percent of the limit you'd use, and `/pace` tells you when you'd run out. It makes no call in a week's first 12 hours, when one busy sitting would look like a blown week.
 - **An animated villager.** He blinks and breathes in every state. He grins and chops away with his pickaxe for as long as the bar is green; as HP falls his swing slows, his head droops, a bandage appears, then tears; near zero he sobs and trembles.
 - **Bars that feel alive.** They sweep in, energy stripes flow through them, a shine passes along, and sparks drift off the leading edge. The heart beats faster as HP drops.
 - **Sci-fi touches.** Corner brackets, a hologram scan, a radar ring around the villager, crackling arcs on an overcharged bar (90%+; a full one shows **MAX**) and red-alert chevrons on a low one.
@@ -98,15 +106,17 @@ Under the OPEN button, **LAST PROMPT** shows the tokens your most recent prompt 
 | `/die` | Watch Claude die (same as `/hp 0`) |
 | `/revive` | Bring Claude back to your real limits |
 | `/open` | Open your artifacts, Word docs and videos (same as the OPEN button) |
+| `/hp usage` | Your AI usage history: tokens and rough cost per day |
+| `/hp settings` | Currency, Ultra layout and auto update |
 | `/hp update` | Check for a newer villager-hp and install it (restart Claude to use it) |
 | `/hp version` | Say which version you have and whether a newer one is out |
 | `/hp autoupdate off` | Tell you about new versions instead of installing them (`on` to go back) |
 | `/ultra on` | Ultra layout: hide SESSION (`/ultra off`, `/ultra auto`) |
 | `/pace` | Say whether your weekly limit lasts at this rate, and when it runs out if not |
-| `/pace over` | Preview the hourglass warning (`/pace ok` previews being on track) |
+| `/pace over` | Preview being over pace (`/pace ok` previews being on track) |
 | `/pace off` | Back to your real pace |
 
-In a terminal, an over-pace week adds `⏳ out by Thu 3pm` to the WEEKLY row.
+In a terminal, the PACE row shows the same as the card.
 
 ## What it can reach
 
@@ -116,14 +126,15 @@ It reads your session's usage figures and keeps your pins and `/ultra` choice in
 - lists file names in your Desktop, Documents, Downloads, Movies, Videos and OneDrive folders, looking for Word docs and videos. It reads names and dates only, never what's in the files;
 - opens the file you press with your computer's own `open`, `explorer.exe` or `xdg-open`.
 
-Once a day it fetches this repository's `plugin.json` from GitHub to see whether a newer version is out, and if so runs Claude Code's own `claude plugin update villager-hp@villager-hp` (unless you turned auto update off).
+Once a day it fetches an exchange rate from open.er-api.com (for the cost in your currency), and this repository's `plugin.json` from GitHub to see whether a newer version is out, and if so runs Claude Code's own `claude plugin update villager-hp@villager-hp` (unless you turned auto update off).
 
-It writes no files of yours.
+Your pins, settings and AI usage history stay in its own small store on your computer. It writes no files of yours.
 
 Readings appear on Claude subscriptions, which report rate-limit windows; on API keys the bars show `—` until a reading arrives.
 
 ## What's new
 
+- **2.11** The last prompt's rough cost at API rates, in your currency. AI usage history and Settings tabs. A nicer OPEN button and library (search, counts, cards grouped by Today, This week and Earlier). No more hourglass, cap date or over-pace chip: the PACE bar's marker and percent show it.
 - **2.10** Updates itself: a daily check that installs a newer version, `/hp update` to check now, `/hp autoupdate off` to be told instead.
 - **2.9** A PACE bar under WEEKLY (SESSION hidden on Ultra), the OPEN pane for your artifacts, docs and videos with pins, and the last prompt's tokens.
 - **2.8** Weekly pace: an hourglass when the week is on course to run out before it resets, plus `/pace`. The villager stays cheerful for as long as the bar is green.
