@@ -383,6 +383,8 @@ test('desktop: after a prompt, the row under the card holds the last prompt and 
   // aren't visible to the test kit, so this checks what each holds).
   expect(await ui.find({ type: 'Box', key: 'tokens' })).toBeDefined()
   expect(await ui.find({ type: 'Box', key: 'tokens-detail' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /new tokens ⓘ/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /new tokens/ })).toBeDefined()
+  // Open sits in the same panel, at the row's right.
+  expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Re-read from cache' })).toBeDefined()
 })

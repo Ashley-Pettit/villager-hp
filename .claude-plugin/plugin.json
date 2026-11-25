@@ -1,6 +1,6 @@
 {
   "name": "villager-hp",
-  "version": "2.11.4",
+  "version": "2.11.5",
   "description": "Your Claude usage limits as an animated villager health card: session and weekly HP, a weekly pace bar, your last prompt's tokens and rough cost, and an OPEN button for your artifacts, docs and videos",
   "author": {
     "name": "Ash",

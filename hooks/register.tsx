@@ -441,12 +441,19 @@ export const register: Register = (on, options) => {
     // Never hold up your prompt over a counter.
     await update($, lastPromptAtom, () => emptyTokens()).catch(() => undefined)
     const usd = (await $.session.usage().catch(() => null))?.cost?.usd
-    await update($, costAtSendAtom, () => usd ?? null).catch(() => undefined)
+    // No estimate yet (a new chat, before its first reply) is a cost of nothing so far.
+    await update($, costAtSendAtom, () => usd ?? 0).catch(() => undefined)
     await recordUse($, { prompts: 1 }).catch(() => undefined)
     return result
   })
 
   on('turn.complete', async ($, e, next) => {
+    // The prompt's cost so far: the session's estimate now, less what it was at send.
+    if (e.agentId === undefined) {
+      const sent = await read($, costAtSendAtom)
+      const usd = (await $.session.usage().catch(() => null))?.cost?.usd
+      if (sent !== null && usd !== undefined) await update($, lastPromptAtom, t => (t === null ? t : { ...t, usd: Math.max(0, usd - sent) }))
+    }
     const u = e.usage
     if (u !== undefined) {
       // New tokens only: cache reads re-read the chat each turn and would swamp the day.
@@ -561,40 +568,45 @@ export const register: Register = (on, options) => {
         all.map(b => `${b.label} ${b.hp === null ? 'unknown' : `${b.hp} of 100`} HP`).join(', ') +
         (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`)
       const sum = tokens === null ? null : promptSummary(tokens, cost)
-      // The card as a plain image at full width, then a row of its own under it:
-      // the last prompt at the left (hover it for the breakdown), OPEN at the right.
-      // Nothing is laid over the image, so its size never matters.
+      // One dark rounded panel: the card as a plain image, then a row inside the
+      // same panel with the last prompt at the left (hover for the breakdown) and
+      // Open at the right. Colours are set for the dark panel, whatever the theme.
+      const C = { muted: '#8f9aa7', text: '#e6ebf1', cost: '#86efac' }
+      const lineParts = sum === null
+        ? [<Text key="none" size="caption" color={C.muted}>LAST PROMPT  —</Text>]
+        : [
+            <Text key="label" size="caption" weight="bold" color={C.muted}>LAST PROMPT</Text>,
+            ...(sum.cost ? [<Text key="cost" size="caption" weight="bold" color={C.cost}>{sum.cost}</Text>] : []),
+            <Text key="fresh" size="caption" color={C.text}>{`${sum.fresh} new tokens`}</Text>,
+            <Text key="info" size="caption" color={C.muted}>ⓘ</Text>,
+          ]
       return (
         <Box flexDirection="column">
           {below}
-          <Svg key={`hp-${m}-${paceZone(pace)}-${ultra}`} source={hudSvg(all, { pace, hideSession: ultra })} alt={`Claude's health: ${alt}`} />
-          <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} paddingX={1}>
+          <Box flexDirection="column" backgroundColor="#0f1318" borderStyle="round" borderColor="#2a313b" paddingX={1}>
+            <Svg key={`hp-${m}-${paceZone(pace)}-${ultra}`} source={hudSvg(all, { pace, hideSession: ultra })} alt={`Claude's health: ${alt}`} />
+            <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1} paddingX={1} paddingBottom={1}>
+              <Box key="tokens" flexDirection="row" alignItems="center" gap={1} hover={{ scope: TOKENS_SCOPE }}>
+                {...lineParts}
+              </Box>
+              <Button key="open" label="Open" variant="secondary" onPress={() => openPane($)}>
+                <Text>⊞</Text>
+                <Text weight="semibold">{' Open'}</Text>
+              </Button>
+            </Box>
             {sum === null ? (
-              <Text size="caption" dimColor>LAST PROMPT —</Text>
+              <></>
             ) : (
-              <Box key="tokens" flexDirection="row" gap={1} hover={{ scope: TOKENS_SCOPE }}>
-                <Text size="caption" weight="bold" dimColor>LAST PROMPT</Text>
-                {sum.cost ? <Text size="caption" weight="bold" color="#16a34a">{sum.cost}</Text> : <></>}
-                <Text size="caption" dimColor>{`· ${sum.fresh} new tokens ⓘ`}</Text>
+              <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" gap={2} paddingX={1} paddingBottom={1}>
+                {...sum.detail.map(([label, value]) => (
+                  <Box key={`detail:${label}`} flexDirection="row" gap={1}>
+                    <Text size="caption" color={C.muted}>{label}</Text>
+                    <Text size="caption" weight="semibold" color={C.text}>{value}</Text>
+                  </Box>
+                ))}
               </Box>
             )}
-            <Button key="open" label="Open" variant="primary" onPress={() => openPane($)}>
-              <Text>⊞</Text>
-              <Text weight="semibold">{' Open'}</Text>
-            </Button>
           </Box>
-          {sum === null ? (
-            <></>
-          ) : (
-            <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" gap={2} paddingX={1}>
-              {...sum.detail.map(([label, value]) => (
-                <Box key={`detail:${label}`} flexDirection="row" gap={1}>
-                  <Text size="caption" dimColor>{label}</Text>
-                  <Text size="caption" weight="semibold">{value}</Text>
-                </Box>
-              ))}
-            </Box>
-          )}
         </Box>
       )
     }
