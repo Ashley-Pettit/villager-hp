@@ -14,6 +14,8 @@ export type PromptTokens = {
   cacheWrite: number
   // Rough cost at API rates in US dollars, from Claude Code's own estimate; absent where it keeps none.
   usd?: number
+  // The same worked out from the token counts at published API prices, for hosts that keep no cost.
+  estUsd?: number
 }
 
 // One thing to open from the Open pane.

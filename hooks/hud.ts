@@ -514,6 +514,13 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
   return icon + label + track + ends + reach + centre + marker + value + chip
 }
 
+// The last prompt along the card's foot: a hairline, then "LAST PROMPT
+// ~A$0.13 · 21k new tokens", and a hint that hovering shows the breakdown.
+const footerLine = (f: { cost: string | null; fresh: string }, top: number) => `
+  <line x1="${ICON_X}" y1="${top + 1}" x2="${HUD_W - 28}" y2="${top + 1}" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="${ICON_X}" y="${top + 11}" ${UI} font-size="9.5" font-weight="700" letter-spacing="1.2" fill="${T.muted}">LAST PROMPT<tspan dx="8" letter-spacing="0" font-weight="700" fill="#86efac">${f.cost ? `~${f.cost}` : ''}</tspan><tspan dx="${f.cost ? 6 : 0}" letter-spacing="0" font-weight="600" fill="${T.text}">${f.fresh} new tokens</tspan></text>
+  <text x="${HUD_W - 28}" y="${top + 11}" text-anchor="end" ${UI} font-size="9" fill="${T.faint}">hover for breakdown ⓘ</text>`
+
 // The last prompt in words, for the row under the card: the rough cost, the
 // new tokens, and the breakdown its hover reveals.
 export const promptSummary = (t: PromptTokens, cost: string | null) => ({
@@ -549,7 +556,8 @@ const aurora = (colour: string) => `
 // What the card adds beyond the bars: the weekly pace bar under WEEKLY
 // (`pace`, null while it's too early to call), SESSION dropped on Ultra, and
 // the last prompt's tokens.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean; width?: number }
+// `footer`: the last prompt, drawn as a slim line along the card's foot.
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; width?: number; footer?: { cost: string | null; fresh: string } | null }
 
 export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   // The bars take what the card's width leaves after the labels, values and chips.
@@ -569,8 +577,11 @@ export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
     ...(extra.pace !== undefined ? [(cy: number, d: number) => paceRow(extra.pace ?? null, cy, d)] : []),
   ]
   // A third row makes the card taller; the avatar drops to its middle.
-  HUD_H = drawers.length > 2 ? 88 : 64
-  const dy = (HUD_H - 64) / 2
+  const rowsH = drawers.length > 2 ? 88 : 64
+  // The footer line adds a strip under the rows; the avatar stays centred on the rows.
+  const FOOT = 16
+  HUD_H = rowsH + (extra.footer ? FOOT : 0)
+  const dy = (rowsH - 64) / 2
   const rows = drawers.map((draw, i) => draw(ROW_CY[i] ?? 20, 0.15 + i * 0.2)).join('')
   const mid = (svg: string) => (dy ? `<g transform="translate(0 ${dy})">${svg}</g>` : svg)
   const glow = (m === 'dead' ? '#59616d' : low === null ? '#3a4350' : T[tone(low)][0]) ?? '#3a4350'
@@ -613,6 +624,7 @@ export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   ${hologram()}
   ${mid(radar(m) + avatar(m, low))}
   ${rows}
+  ${extra.footer ? footerLine(extra.footer, rowsH) : ''}
   ${cornerBrackets()}
   ${deathScreen}
   </g>

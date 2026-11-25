@@ -5,7 +5,7 @@ import type { DayUse, LibItem, LibKind, Limit, PaneTab, Plan, PromptTokens } fro
 import { CARD_W_BESIDE_OPEN, backIn, bars, emptyTokens, fmtTokens, newTokens, hudSvg, isUltra, killer, mood, paceShort, promptSummary, paceZone, pacePosition, weeklyPace } from './hud'
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
-import { CURRENCIES, asCurrency, fallbackRate, fmtMoney, rateFor } from './money'
+import { CURRENCIES, asCurrency, estimateUsd, fallbackRate, fmtMoney, promptUsd, rateFor } from './money'
 import { addUse, lastDays, readHistory, sumDays, usageChart } from './usage'
 import { NOT_CATALOG, dailyCheck, installedVersion, isAutoUpdate, isCatalogPath, isNewer, latestVersion, runUpdate } from './update'
 
@@ -112,7 +112,10 @@ const ultraNow = async ($: EngineInterface) => isUltra(await read($, planAtom), 
 export const register: Register = (on, options) => {
   // The currency for the last prompt's cost: Settings → the villager-hp row (userConfig), AUD by default.
   const currency = asCurrency(options.currency)
-  const money = (t: PromptTokens | null, rate: number) => (t?.usd === undefined ? null : fmtMoney(t.usd, currency, rate))
+  const money = (t: PromptTokens | null, rate: number) => {
+    const usd = promptUsd(t)
+    return usd === undefined ? null : fmtMoney(usd, currency, rate)
+  }
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -456,6 +459,11 @@ export const register: Register = (on, options) => {
     }
     const u = e.usage
     if (u !== undefined) {
+      // Worked out from the tokens at API prices, for hosts that keep no cost of their own.
+      const est = estimateUsd(u)
+      await update($, lastPromptAtom, t => (t === null ? t : { ...t, estUsd: (t.estUsd ?? 0) + est }))
+      const hasLedger = (await $.session.usage().catch(() => null))?.cost !== undefined
+      if (!hasLedger) await recordUse($, { usd: est }).catch(() => undefined)
       // New tokens only: cache reads re-read the chat each turn and would swamp the day.
       await recordUse($, { tokens: u.input_tokens + u.output_tokens + u.cache_creation_input_tokens }).catch(() => undefined)
       await update($, lastPromptAtom, prev => {
@@ -569,41 +577,31 @@ export const register: Register = (on, options) => {
         (pace === null ? '' : `, weekly pace ${pace.projected}% of the limit by the reset`)
       const sum = tokens === null ? null : promptSummary(tokens, cost)
       // One dark rounded panel: the card at the left (85%, drawn narrower so its
-      // bars are shorter) and a column at the right (15%) with Open and, under
-      // it, the last prompt; hover that for the breakdown, which shows under the
-      // panel. Side by side, nothing laid over the image, so its size never
-      // matters. Colours are set for the dark panel, whatever the theme.
-      const C = { muted: '#8f9aa7', text: '#e6ebf1', cost: '#86efac' }
+      // bars are shorter) with the last prompt along its foot, drawn into the
+      // image so its size is exact; Open alone in the column at the right (15%).
+      // Hovering the card reveals the breakdown under it. Side by side, nothing
+      // laid over the image, so the app's sizing can't move anything.
+      const C = { muted: '#8f9aa7', text: '#e6ebf1' }
       return (
         <Box flexDirection="column">
           {below}
           <Box flexDirection="column" backgroundColor="#0f1318" borderStyle="round" borderColor="#2a313b" paddingX={1}>
             <Box flexDirection="row" alignItems="center">
-              <Box width="85%">
-                <Svg key={`hp-${m}-${paceZone(pace)}-${ultra}`} source={hudSvg(all, { pace, hideSession: ultra, width: CARD_W_BESIDE_OPEN })} alt={`Claude's health: ${alt}`} />
+              <Box key="card" width="85%" hover={{ scope: TOKENS_SCOPE }}>
+                <Svg
+                  key={`hp-${m}-${paceZone(pace)}-${ultra}`}
+                  source={hudSvg(all, { pace, hideSession: ultra, width: CARD_W_BESIDE_OPEN, footer: sum === null ? null : { cost, fresh: sum.fresh } })}
+                  alt={`Claude's health: ${alt}`}
+                />
               </Box>
-              <Box width="15%" flexDirection="column" alignItems="center" justifyContent="center" gap={1}>
-                <Button key="open" label="Open" variant="primary" onPress={() => openPane($)}>
-                  <Text>⊞</Text>
-                  <Text weight="semibold">{' Open'}</Text>
-                </Button>
-                <Box key="tokens" flexDirection="column" alignItems="center" hover={{ scope: TOKENS_SCOPE }}>
-                  <Text size="caption" weight="bold" color={C.muted}>{sum === null ? 'LAST PROMPT —' : 'LAST PROMPT ⓘ'}</Text>
-                  {sum === null ? (
-                    <></>
-                  ) : (
-                    <Box flexDirection="row" gap={1}>
-                      {...(sum.cost ? [<Text key="cost" size="caption" weight="bold" color={C.cost}>{sum.cost}</Text>] : [])}
-                      <Text key="fresh" size="caption" color={C.text}>{`${sum.fresh} new`}</Text>
-                    </Box>
-                  )}
-                </Box>
+              <Box width="15%" alignItems="center" justifyContent="center">
+                <Button key="open" label="Open" variant="primary" onPress={() => openPane($)} />
               </Box>
             </Box>
             {sum === null ? (
               <></>
             ) : (
-              <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" justifyContent="flex-end" gap={2} paddingX={1} paddingBottom={1}>
+              <Box key="tokens-detail" display="none" hover={{ display: 'flex', scope: TOKENS_SCOPE }} flexDirection="row" flexWrap="wrap" gap={2} paddingX={1} paddingBottom={1}>
                 {...sum.detail.map(([label, value]) => (
                   <Box key={`detail:${label}`} flexDirection="row" gap={1}>
                     <Text size="caption" color={C.muted}>{label}</Text>

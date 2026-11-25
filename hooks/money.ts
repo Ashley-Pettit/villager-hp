@@ -1,5 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
+import type { PromptTokens } from '../types'
+
 // The last prompt's rough cost at API rates, in your currency. Claude Code
 // estimates every response's cost at API prices (what /cost shows); the
 // prompt's share is that estimate when it finished, less what it was when
@@ -46,3 +48,40 @@ export async function rateFor($: EngineInterface, currency: Currency): Promise<n
   }
   return kept?.rates?.[currency] ?? FALLBACK[currency]
 }
+
+// Published Claude API prices, US$ per million tokens: input, output and cache
+// read; a cache write costs 1.25x input (2x for a one-hour write). Used when
+// Claude Code gives no cost of its own (cloud chats), so a prompt still shows
+// a rough cost. Most specific id first. Unknown models are priced as Opus 5.5.
+const PRICES: ReadonlyArray<[RegExp, { input: number; output: number; read: number }]> = [
+  [/(fable|mythos)-5-2/, { input: 8, output: 40, read: 0.2 }],
+  [/(fable|mythos)-5-1/, { input: 10, output: 50, read: 0.25 }],
+  [/(fable|mythos)-5/, { input: 10, output: 50, read: 1 }],
+  [/opus-5-5/, { input: 4, output: 20, read: 0.2 }],
+  [/opus-(5|4)/, { input: 5, output: 25, read: 0.5 }],
+  [/sonnet-5-5/, { input: 2, output: 10, read: 0.1 }],
+  [/sonnet-5/, { input: 2, output: 10, read: 0.2 }],
+  [/sonnet-4/, { input: 3, output: 15, read: 0.3 }],
+  [/haiku-5-5/, { input: 0.1, output: 0.5, read: 0.01 }],
+  [/haiku-4/, { input: 1, output: 5, read: 0.1 }],
+]
+
+export type TurnTokens = {
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_input_tokens: number
+  ephemeral_1h_input_tokens?: number
+  model?: string
+}
+
+// One turn's rough cost at API rates, in US$.
+export const estimateUsd = (u: TurnTokens) => {
+  const price = PRICES.find(([re]) => re.test(u.model ?? ''))?.[1] ?? { input: 4, output: 20, read: 0.2 }
+  const hour = u.ephemeral_1h_input_tokens ?? 0
+  const fiveMin = Math.max(0, u.cache_creation_input_tokens - hour)
+  return (u.input_tokens * price.input + u.output_tokens * price.output + u.cache_read_input_tokens * price.read + fiveMin * price.input * 1.25 + hour * price.input * 2) / 1e6
+}
+
+// The prompt's cost: Claude Code's own figure where it gave one, else the estimate.
+export const promptUsd = (t: PromptTokens | null) => (t === null ? undefined : t.usd ?? t.estUsd)

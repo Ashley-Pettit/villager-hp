@@ -2,7 +2,7 @@ import type { On, RenderElement } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
 import { fmtTokens, isUltra, pacePosition, paceShort, promptSummary, weeklyPace } from './hud'
-import { asCurrency, fmtMoney } from './money'
+import { asCurrency, estimateUsd, fmtMoney } from './money'
 import { dayKey, lastDays, sumDays } from './usage'
 import { ordered, parseArtifacts } from './library'
 import { isCatalogPath, isNewer } from './update'
@@ -373,18 +373,25 @@ test('/pace over gives a percent, never a date', async ($, on) => {
   expect(said.text).not.toMatch(/out (by|in)|Mon|Tue|Wed|Thu|Fri|Sat|Sun/)
 })
 
-test('desktop: after a prompt, the row under the card holds the last prompt and its breakdown', async ($, on) => {
+test('desktop: after a prompt, the foot of the card shows the last prompt, and its breakdown waits for hover', async ($, on) => {
   statusRow(on)
   on('prompt.submit', (_, e) => e as never)
   const ui = await $.ui.mount({ plugin: 'villager-hp', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   await $.prompt.submit({ text: 'hello' } as never)
 
-  // The line and its breakdown row are both drawn; the row shows on hover (hover props
-  // aren't visible to the test kit, so this checks what each holds).
-  expect(await ui.find({ type: 'Box', key: 'tokens' })).toBeDefined()
+  const card = String((await ui.find({ type: 'Svg' }))?.props.source)
+  expect(card).toMatch(/LAST PROMPT/)
+  expect(card).toMatch(/0 new tokens/)
+  expect(await ui.find({ type: 'Box', key: 'card' })).toBeDefined()
   expect(await ui.find({ type: 'Box', key: 'tokens-detail' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /new$/ })).toBeDefined()
-  // Open sits in the same panel, at the row's right.
-  expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Re-read from cache' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'open' })).toBeDefined()
+})
+
+test('cost: worked out from the tokens at API prices when Claude Code gives none', () => {
+  // The earlier real prompt on Opus 5.5: 4 in, 163 out, 395k re-read, 5 newly cached.
+  const usd = estimateUsd({ input_tokens: 4, output_tokens: 163, cache_read_input_tokens: 394931, cache_creation_input_tokens: 5, model: 'claude-opus-5-5' })
+  expect(fmtMoney(usd, 'AUD', 1.53)).toBe('A$0.13')
+  expect(estimateUsd({ input_tokens: 1e6, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' })).toBe(2)
+  expect(estimateUsd({ input_tokens: 0, output_tokens: 1e6, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-fable-5-2' })).toBe(40)
 })
