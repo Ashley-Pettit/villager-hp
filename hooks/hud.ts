@@ -130,10 +130,12 @@ export const emptyTokens = (): PromptTokens => ({ total: 0, input: 0, output: 0,
 
 // ---- the SVG HUD: a modern status card with the villager, 960 x 64 ----
 
-export let HUD_W = 960
-// The right end of the card holds the last prompt; the bars fill what's left.
-const PROMPT_W = 150
-const PROMPT_GAP = 24
+// The card is drawn 880 wide: shown at the width it's given, that makes
+// everything on it about 9% bigger than at 960.
+export let HUD_W = 880
+// The right end of the card holds the last prompt and today; the bars fill what's left.
+const PROMPT_W = 196
+const PROMPT_GAP = 22
 // 64 for two rows, 88 for three; hudSvg sets it for the card it draws.
 export let HUD_H = 64
 // A little air above the card, in the same units. Outside the card's own
@@ -514,19 +516,20 @@ const paceRow = (pace: Pace | null, cy: number, delay: number) => {
   return icon + label + track + ends + reach + centre + marker + value + chip
 }
 
-// The last prompt's rough cost at API rates, at the card's right end: a small
-// label, the cost large, "at API rates" under it. A thin rule sets it apart
-// from the reset times. "—" until the first prompt.
-const promptBlock = (p: { cost: string | null } | null, rowsH: number) => {
-  const x = HUD_W - 16 - PROMPT_W
-  const mid = x + PROMPT_W / 2
-  const top = rowsH / 2 - 22
-  const rule = `<line x1="${x}" y1="${rowsH / 2 - 20}" x2="${x}" y2="${rowsH / 2 + 20}" stroke="#ffffff" stroke-opacity="0.08"/>`
-  const label = `<text x="${mid}" y="${top + 9}" text-anchor="middle" ${UI} font-size="9.5" font-weight="700" letter-spacing="1.4" fill="${T.muted}">LAST PROMPT</text>`
-  if (p === null || p.cost === null) return `${rule}${label}<text x="${mid}" y="${top + 30}" text-anchor="middle" ${UI} font-size="15" font-weight="600" fill="${T.faint}">—</text>`
-  return `${rule}${label}
-  <text x="${mid}" y="${top + 31}" text-anchor="middle" ${UI} font-size="19" font-weight="800" fill="#86efac">~${p.cost}</text>
-  <text x="${mid}" y="${top + 44}" text-anchor="middle" ${UI} font-size="10" font-weight="500" fill="${T.muted}">at API rates</text>`
+// The rough cost at API rates at the card's right end, as two figures side by
+// side: LAST PROMPT (green) and TODAY, each a small label over the amount. A
+// thin rule sets them apart from the reset times. "—" for no prompt yet.
+const promptBlock = (p: { cost: string | null; today: string | null } | null, rowsH: number) => {
+  // Clear of the corner brackets at the right edge.
+  const x = HUD_W - 28 - PROMPT_W
+  const mid = rowsH / 2
+  const rule = `<line x1="${x}" y1="${mid - 20}" x2="${x}" y2="${mid + 20}" stroke="#ffffff" stroke-opacity="0.08"/>`
+  const stat = (sx: number, label: string, value: string | null, colour: string) =>
+    `<text x="${sx}" y="${mid - 6}" ${UI} font-size="9.5" font-weight="700" letter-spacing="1.2" fill="${T.muted}">${label}</text>
+  <text x="${sx}" y="${mid + 14}" ${UI} font-size="17" font-weight="800" fill="${value ? colour : T.faint}">${value ?? '—'}</text>`
+  return `${rule}
+  ${stat(x + 16, 'LAST PROMPT', p?.cost ? `~${p.cost}` : null, '#86efac')}
+  ${stat(x + 16 + PROMPT_W / 2, 'TODAY', p?.today ? `~${p.today}` : null, T.text)}`
 }
 
 const gradient = (id: string, hp: number | null) => {
@@ -552,12 +555,12 @@ const aurora = (colour: string) => `
 // the last prompt's tokens.
 // `footer`: the last prompt, drawn as a slim line along the card's foot.
 // `prompt`: the last prompt's rough cost for the card's right end; null before the first.
-export type HudExtra = { pace?: Pace | null; hideSession?: boolean; prompt?: { cost: string | null } | null }
+export type HudExtra = { pace?: Pace | null; hideSession?: boolean; prompt?: { cost: string | null; today: string | null } | null }
 
 export const hudSvg = (all: Bar[], extra: HudExtra = {}) => {
   // The bars take what the card's width leaves after the labels, values and chips.
-  HUD_W = 960
-  BAR_W = HUD_W - 16 - PROMPT_W - PROMPT_GAP - 78 - 66 - 16 - BAR_X
+  HUD_W = 880
+  BAR_W = HUD_W - 28 - PROMPT_W - PROMPT_GAP - 78 - 66 - 16 - BAR_X
   VALUE_X = BAR_X + BAR_W + 16
   const m = mood(all)
   const dead = killer(all)

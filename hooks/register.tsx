@@ -6,7 +6,7 @@ import { backIn, bars, emptyTokens, hudSvg, isUltra, killer, mood, paceShort, pa
 import type { Pace } from './hud'
 import { age, listArtifacts, openFile, ordered, scanFiles } from './library'
 import { CURRENCIES, addTurn, asCurrency, estimateUsd, fallbackRate, fmtMoney, promptUsd, rateFor } from './money'
-import { addUse, lastDays, readHistory, sumDays, usageChart } from './usage'
+import { addUse, dayKey, lastDays, readHistory, sumDays, usageChart } from './usage'
 import { NOT_CATALOG, dailyCheck, installedVersion, isAutoUpdate, isCatalogPath, isNewer, latestVersion, runUpdate } from './update'
 
 const limitsAtom = atom({ plugin: 'villager-hp', key: 'limits' } as const, [] as Limit[])
@@ -555,6 +555,9 @@ export const register: Register = (on, options) => {
     const pace = weeklyPace(await read($, limitsAtom), await read($, paceDemoAtom), now)
     const tokens = await read($, lastPromptAtom)
     const cost = money(tokens, await read($, fxRateAtom))
+    // Today's rough cost so far, from the same daily history the AI usage tab keeps.
+    const todayUse = (await read($, historyAtom))[dayKey(Date.now())]
+    const todayCost = todayUse === undefined ? null : fmtMoney(todayUse.usd, currency, await read($, fxRateAtom))
     const elements = $.ui.resolve(e)
 
     // The animated card everywhere but the terminal, which gets the text bars.
@@ -572,7 +575,7 @@ export const register: Register = (on, options) => {
           {below}
           <Svg
             key={`hp-${m}-${paceZone(pace)}-${ultra}`}
-            source={hudSvg(all, { pace, hideSession: ultra, prompt: tokens === null ? null : { cost } })}
+            source={hudSvg(all, { pace, hideSession: ultra, prompt: { cost: tokens === null ? null : cost, today: todayCost } })}
             alt={`Claude's health: ${alt}`}
           />
         </Box>

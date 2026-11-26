@@ -72,7 +72,7 @@ Type `/open` to open a pane listing your claude.ai artifacts, and the Word docs 
 - Tabs narrow the list to Artifacts, Docs or Videos. Refresh looks again.
 - An artifact opens in your browser; a doc or video opens in its own app.
 
-At the right end of the card, **LAST PROMPT** shows your most recent prompt's rough cost at API rates, in your currency (AUD by default; change it in `/hp settings` or `/config`). It's Claude Code's own estimate (what `/cost` shows) where it gives one, else worked out from the tokens at published API prices, converted at a daily exchange rate. On a subscription you aren't billed it.
+At the right end of the card, **LAST PROMPT** and **TODAY** show the rough cost at API rates of your most recent prompt and of today so far, in your currency (AUD by default; change it in `/hp settings` or `/config`). It's Claude Code's own estimate (what `/cost` shows) where it gives one, else worked out from the tokens at published API prices, converted at a daily exchange rate. On a subscription you aren't billed it.
 
 ## AI usage and settings
 

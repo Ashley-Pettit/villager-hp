@@ -156,7 +156,7 @@ test('desktop: /ultra on swaps SESSION for the PACE bar', async ($, on) => {
   const standard = await card()
   expect(standard).toMatch(/>SESSION</)
   expect(standard).toMatch(/>PACE</)
-  expect(standard).toMatch(/viewBox="0 0 960 94"/)
+  expect(standard).toMatch(/viewBox="0 0 880 94"/)
   await $.command.run(ultraCmd('on'))
   const ultra = await card()
   expect(ultra).not.toMatch(/>SESSION</)
@@ -221,7 +221,7 @@ test('desktop: the card is a plain image with nothing around it, and no Open but
   expect(await ui.find({ type: 'Button', key: 'open' })).toBeUndefined()
   expect((await ui.find({ type: 'Svg' }))?.props.isInteractive).toBeUndefined()
   // The last prompt sits at the card's right end, "—" until the first prompt.
-  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toMatch(/LAST PROMPT<\/text><text[^>]*>—</)
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toMatch(/LAST PROMPT<\/text>\s*<text[^>]*>—</)
 })
 
 test('pane: /open lists artifacts and local docs and videos, recent first, and pins one to the top', async ($, on) => {
@@ -391,9 +391,11 @@ test('cost: adding a turn keeps the cost, so the card shows it after the prompt'
   expect(promptUsd(addTurn({ ...once, usd: 0.5 }, turn))).toBe(0.5)
 })
 
-test('card: LAST PROMPT shows the rough cost large, at API rates', () => {
-  const svg = hudSvg(bars(week(20, 5), null, NOW), { prompt: { cost: 'A$0.13' } })
-  expect(svg).toMatch(/>~A\$0\.13<\/text>/)
-  expect(svg).toMatch(/>at API rates<\/text>/)
+test('card: LAST PROMPT and TODAY side by side, as rough costs', () => {
+  const svg = hudSvg(bars(week(20, 5), null, NOW), { prompt: { cost: 'A$0.13', today: 'A$1.20' } })
+  expect(svg).toMatch(/>LAST PROMPT<\/text>\s*<text[^>]*>~A\$0\.13<\/text>/)
+  expect(svg).toMatch(/>TODAY<\/text>\s*<text[^>]*>~A\$1\.20<\/text>/)
   expect(svg).not.toMatch(/tokens/)
+  // Nothing yet: a dash for each.
+  expect(hudSvg(bars(week(20, 5), null, NOW), { prompt: { cost: null, today: null } })).toMatch(/>TODAY<\/text>\s*<text[^>]*>—<\/text>/)
 })
